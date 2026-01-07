@@ -9,11 +9,11 @@ from astrbot.api import logger, AstrBotConfig
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent 
 import astrbot.api.message_components as Comp
 
-class RandomWifePlugin(Star):
+class RandomDogPlugin(Star):
     """
-    AstrBot随机抽老婆插件
+    AstrBot随机抽狗狗插件
     功能：
-    1. 随机抽取群友作为"老婆"（排除Bot和指定用户）
+    1. 随机抽取群友作为"狗狗"（排除Bot和指定用户）
     2. 支持每日抽取次数限制（可配置）
     3. 持久化保存抽取记录到JSON文件
     4. 支持@和不@的命令选项
@@ -29,12 +29,12 @@ class RandomWifePlugin(Star):
         super().__init__(context)
         self.config = config # 保存从框架传入的配置对象，用于后续读取用户配置
         
-        self.data_dir = os.path.join("data", "plugins", "random_wife") # 构建数据存储目录路径（/bot目录/data/plugins/random_wife）
-        self.records_file = os.path.join(self.data_dir, "wife_records.json")
+        self.data_dir = os.path.join("data", "plugins", "random_dog") # 构建数据存储目录路径（/bot目录/data/plugins/random_dog）
+        self.records_file = os.path.join(self.data_dir, "dog_records.json")
         
         os.makedirs(self.data_dir, exist_ok=True)
         self.records = self._load_records()
-        logger.info("随机抽老婆插件已加载")
+        logger.info("随机抽狗狗插件已加载")
 
     # 从文件加载记录
     def _load_records(self) -> Dict[str, Any]: 
@@ -94,36 +94,36 @@ class RandomWifePlugin(Star):
         return sum(1 for record in group_records if record["user_id"] == user_id)
 
     # 添加抽取历史记录
-    def _add_record(self, group_id: str, user_id: str, wife_id: str, wife_name: str, with_at: bool):
+    def _add_record(self, group_id: str, user_id: str, dog_id: str, dog_name: str, with_at: bool):
         if self._is_new_day():
             self._reset_daily_records()
         if group_id not in self.records["groups"]:
             self.records["groups"][group_id] = {"records": []}
         
         record = {
-            "user_id": user_id, "wife_id": wife_id, "wife_name": wife_name,
+            "user_id": user_id, "dog_id": dog_id, "dog_name": dog_name,
             "timestamp": datetime.now().isoformat(), "with_at": with_at
         }
         self.records["groups"][group_id]["records"].append(record)
         self._save_records()
-        logger.info(f"用户{user_id}在群{group_id}抽取了{wife_name}({wife_id})")
+        logger.info(f"用户{user_id}在群{group_id}抽取了{dog_name}({dog_id})")
     
-    @filter.command("今日老婆", alias={'抽老婆'})
-    async def draw_wife_with_at(self, event: AstrMessageEvent):
-        """抽取今日老婆（带@功能），别名“抽老婆”"""
-        async for result in self._draw_wife_common(event, with_at=True):
+    @filter.command("今日狗狗", alias={'抽狗狗'})
+    async def draw_dog_with_at(self, event: AstrMessageEvent):
+        """抽取今日狗狗（带@功能），别名“抽狗狗”"""
+        async for result in self._draw_dog_common(event, with_at=True):
             yield result
     
-    @filter.command("抽老婆-@",alias={'今日老婆-@'})
-    async def draw_wife_without_at(self, event: AstrMessageEvent):
-        """抽取今日老婆（不带@功能），别名“今日老婆-@”"""
-        async for result in self._draw_wife_common(event, with_at=False):
+    @filter.command("抽狗狗-@",alias={'今日狗狗-@'})
+    async def draw_dog_without_at(self, event: AstrMessageEvent):
+        """抽取今日狗狗（不带@功能），别名“今日狗狗-@”"""
+        async for result in self._draw_dog_common(event, with_at=False):
             yield result
     
     # 抽取方法
-    async def _draw_wife_common(self, event: AstrMessageEvent, with_at: bool):
+    async def _draw_dog_common(self, event: AstrMessageEvent, with_at: bool):
         if event.is_private_chat():
-            yield event.plain_result("抽老婆功能仅在群聊中可用哦~")
+            yield event.plain_result("抽狗狗功能仅在群聊中可用哦~")
             return
         
         user_id = event.get_sender_id() # 获取发送者ID
@@ -137,7 +137,7 @@ class RandomWifePlugin(Star):
         daily_limit = self.config.get("daily_limit", 3)
         today_count = self._get_today_count(group_id, user_id)
         if today_count >= daily_limit:
-            yield event.plain_result(f"你今天已经抽了{today_count}次老婆了，明天再来吧！")
+            yield event.plain_result(f"你今天已经抽了{today_count}次狗狗了，明天再来吧！")
             return
         
         members = await self._get_group_members(event)
@@ -154,20 +154,20 @@ class RandomWifePlugin(Star):
             yield event.plain_result("群里没有可以抽取的成员哦~")
             return
         
-        wife = random.choice(available_members)
-        wife_id, wife_name = wife.get("user_id"), wife.get("card") or wife.get("nickname") or f"用户{wife.get('user_id')}"
+        dog = random.choice(available_members)
+        dog_id, dog_name = dog.get("user_id"), dog.get("card") or dog.get("nickname") or f"用户{dog.get('user_id')}"
         
-        self._add_record(group_id, user_id, str(wife_id), wife_name, with_at) 
+        self._add_record(group_id, user_id, str(dog_id), dog_name, with_at) 
         
-        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={wife_id}&spec=640"
+        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={dog_id}&spec=640"
         remaining = daily_limit - today_count - 1
         
-        text_content = f" 你的今日老婆是：\n"
+        text_content = f" 你的今日狗狗是：\n"
 
         if with_at:
-            wife_info_text = f"\u200b"
+            dog_info_text = f"\u200b"
         else:
-            wife_info_text = f"\n{wife_name}"
+            dog_info_text = f"\n{dog_name}"
 
         remaining_text = f"\r剩余抽取次数：{remaining}次"
 
@@ -179,16 +179,16 @@ class RandomWifePlugin(Star):
 ]
 
         if with_at:
-            chain.append(Comp.At(qq=wife_id))
-            chain.append(Comp.Plain(wife_info_text + remaining_text))
+            chain.append(Comp.At(qq=dog_id))
+            chain.append(Comp.Plain(dog_info_text + remaining_text))
         else:
-            chain.append(Comp.Plain(wife_info_text + remaining_text))
+            chain.append(Comp.Plain(dog_info_text + remaining_text))
 
         yield event.chain_result(chain)
     
-    @filter.command("我的老婆", alias={'抽取历史'})
-    async def show_my_wives(self, event: AstrMessageEvent):
-        """显示用户的抽取历史，别名“抽取历史”"""
+    @filter.command("我的狗狗", alias={'抽取历史'})
+    async def show_my_dogs(self, event: AstrMessageEvent):
+        """显示用户的抽取历史（我的狗狗），别名“抽取历史”"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return # 结束
@@ -205,15 +205,15 @@ class RandomWifePlugin(Star):
         user_records = [r for r in group_records if r["user_id"] == user_id]
         
         if not user_records:
-            yield event.plain_result("你今天还没有抽过老婆哦~")
+            yield event.plain_result("你今天还没有抽过狗狗哦~")
             return
         
         daily_limit = self.config.get("daily_limit", 3)
-        result = [f"你今天的老婆记录({len(user_records)}/{daily_limit})："]
+        result = [f"你今天的狗狗记录({len(user_records)}/{daily_limit})："]
         for i, record in enumerate(user_records, 1):
             time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
             at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record['wife_name']} ({record['wife_id']}) 在 {time_str} {at_status}")
+            result.append(f"{i}. {record['dog_name']} ({record['dog_id']}) 在 {time_str} {at_status}")
         
         remaining = daily_limit - len(user_records)
         result.append(f"剩余次数：{remaining}次")
@@ -225,23 +225,23 @@ class RandomWifePlugin(Star):
         """仅bot管理员可使用：重置所有群聊的所有记录（慎用！）"""
         self._reset_daily_records()
         yield event.plain_result("今日抽取记录已重置！")
-    
-    @filter.command("抽老婆帮助" , alias={'今日老婆帮助'})
+
+    @filter.command("抽狗狗帮助" , alias={'今日狗狗帮助'})
     async def show_help(self, event: AstrMessageEvent):
-        """显示帮助，别名“今日老婆帮助”"""
+        """显示帮助，别名“今日狗狗帮助”"""
         daily_limit = self.config.get("daily_limit", 3)
         excluded_count = len(self.config.get("excluded_users", []))
-        help_text = f"""=== 抽老婆帮助 v2.0.5 ===
+        help_text = f"""=== 抽狗狗帮助 v2.0.5 ===
         
 🎯 主要功能：
-• 今日老婆 / 抽老婆 - 随机抽取群友作为今日老婆（带@）
-• 抽老婆-@ / 今日老婆-@
+• 今日狗狗 / 抽狗狗 - 随机抽取群友作为今日狗狗（带@）
+• 抽狗狗-@ / 今日狗狗-@
    - 随机抽取群友（不带@）
-• 我的老婆 / 抽取历史 
+• 我的狗狗 / 抽取历史 
    - 查看今天的抽取记录
 • 重置记录
    - 管理员专用，重置今日记录
-• 抽老婆帮助 / 今日老婆帮助
+• 抽狗狗帮助 / 今日狗狗帮助
    - 查看该帮助
 
 📝 使用说明：
@@ -259,6 +259,6 @@ class RandomWifePlugin(Star):
     async def terminate(self):
         try:
             self._save_records()
-            logger.info("抽老婆插件资源已清理完毕")
+            logger.info("抽狗狗插件资源已清理完毕")
         except Exception as e:
             logger.error(f"插件终止时出现错误: {e}")
