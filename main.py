@@ -237,6 +237,96 @@ class RandomIdentityPlugin(Star):
             chain.append(Comp.Plain(info_text + remaining_text))
 
         yield event.chain_result(chain)
+
+    @filter.command("来随机吧")
+    async def roll_all_identities(self, event: AstrMessageEvent):
+        """一次性按各身份剩余上限全部抽取并合并发送（默认不 @）。"""
+        if event.is_private_chat():
+            yield event.plain_result("该功能仅在群聊中可用哦~")
+            return
+
+        user_id = event.get_sender_id()
+        group_id = event.get_group_id()
+        bot_id = event.get_self_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
+            return
+
+        kinds = [
+            ('dog', '狗狗', 'daily_limit_dog'),
+            ('owner', '主人', 'daily_limit_owner'),
+            ('wife', '老婆', 'daily_limit_wife'),
+            ('husband', '老公', 'daily_limit_husband'),
+            ('father', '爸爸', 'daily_limit_father'),
+        ]
+
+        # 计算每种身份的剩余可抽取次数
+        to_draw = []  # list of tuples (kind, label, count)
+        for kind, label, cfg_key in kinds:
+            limit = self.config.get(cfg_key, self.config.get('daily_limit', 3))
+            today_count = self._get_today_count(group_id, user_id, kind=kind)
+            remaining = max(0, limit - today_count)
+            if remaining > 0:
+                to_draw.append((kind, label, remaining))
+
+        if not to_draw:
+            yield event.plain_result("你今天已经抽满了所有身份的次数，明天再来吧~")
+            return
+
+        members = await self._get_group_members(event)
+        if not members:
+            yield event.plain_result("暂时无法获取群成员列表，请确保Bot有相应权限")
+            return
+
+        excluded = {str(uid) for uid in self.config.get("excluded_users", [])}
+        excluded.add(str(bot_id))
+        excluded.add(str(user_id))
+
+        available_members = [m for m in members if str(m.get("user_id", "")) not in excluded]
+        if not available_members:
+            yield event.plain_result("群里没有可以抽取的成员哦~")
+            return
+
+        # 执行抽取
+        results = []  # list of dicts: {kind,label,target_id,target_name}
+        for kind, label, count in to_draw:
+            # 如果成员足够，优先不重复抽取
+            if len(available_members) >= count:
+                chosen = random.sample(available_members, count)
+            else:
+                chosen = [random.choice(available_members) for _ in range(count)]
+
+            for target in chosen:
+                target_id = target.get('user_id')
+                target_name = target.get('card') or target.get('nickname') or f"用户{target.get('user_id')}"
+                self._add_record(group_id, user_id, str(target_id), target_name, False, kind=kind)
+                results.append({
+                    'kind': kind,
+                    'label': label,
+                    'target_id': target_id,
+                    'target_name': target_name,
+                })
+
+        # 构建合并消息链（默认不 @，仅附带头像和说明）
+        header = "为你一次性抽取的今日身份如下：\n"
+        chain = [
+            Comp.At(qq=user_id),
+            Comp.Plain(header),
+        ]
+
+        # 按身份分组显示
+        grouped = {}
+        for r in results:
+            grouped.setdefault(r['label'], []).append(r)
+
+        for label, items in grouped.items():
+            chain.append(Comp.Plain(f"{label}：\n"))
+            for i, it in enumerate(items, 1):
+                avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={it['target_id']}&spec=640"
+                chain.append(Comp.Image.fromURL(avatar_url))
+                chain.append(Comp.Plain(f"{label}{i}. {it['target_name']} ({it['target_id']})\n"))
+
+        yield event.chain_result(chain)
     
     @filter.command("我的狗狗", alias={'抽取历史'})
     async def show_my_dogs(self, event: AstrMessageEvent):
@@ -438,30 +528,31 @@ class RandomIdentityPlugin(Star):
         husband_limit = self.config.get("daily_limit_husband", self.config.get("daily_limit", 3))
         father_limit = self.config.get("daily_limit_father", self.config.get("daily_limit", 3))
         excluded_count = len(self.config.get("excluded_users", []))
-        help_text = f"""=== 抽身份 插件 帮助 v2.0.9 ===
+        help_text = f"""=== 抽身份 插件 帮助 v2.1.0 ===
         
-🎯 主要功能：
-• 今日身份 - 列出你今天抽到的所有身份（狗狗/主人/老婆/老公/爸爸）
-• 今日狗狗 / 抽狗狗 - 随机抽取群友作为今日狗狗（带@）
-• 抽狗狗-@ / 今日狗狗-@ - 不带@
-• 今日主人 / 抽主人 - 随机抽取群友作为今日主人（带@）
-• 抽主人-@ / 今日主人-@ - 不带@
-• 抽老婆 / 抽老婆-@ - 抽取老婆（带/不带@）
-• 抽老公 / 抽老公-@ - 抽取老公（带/不带@）
-• 抽爸爸 / 抽爸爸-@ - 抽取爸爸（带/不带@）
-• 我的狗狗 / 我的主人 / 我的老婆 / 我的老公 / 我的爸爸 - 查看各自的今日记录
-• 重置记录 - 管理员专用，重置今日记录
+    🎯 主要功能：
+    • 今日身份 - 列出你今天抽到的所有身份（狗狗/主人/老婆/老公/爸爸）
+    • 今日狗狗 / 抽狗狗 - 随机抽取一位群友作为今日狗狗（带@）
+    • 抽狗狗-@ / 今日狗狗-@ - 不带@
+    • 今日主人 / 抽主人 - 随机抽取一位群友作为今日主人（带@）
+    • 抽主人-@ / 今日主人-@ - 不带@
+    • 抽老婆 / 抽老婆-@ - 抽取老婆（带/不带@）
+    • 抽老公 / 抽老公-@ - 抽取老公（带/不带@）
+    • 抽爸爸 / 抽爸爸-@ - 抽取爸爸（带/不带@）
+    • 我的狗狗 / 我的主人 / 我的老婆 / 我的老公 / 我的爸爸 - 查看各自的今日记录
+    • 来随机吧 - 新增命令：一次性按各身份的剩余每日上限全部抽取并合并发送（默认不 @，会附带头像）。
+    • 重置记录 - 管理员专用，重置今日记录
 
-📝 使用说明：
-• 每人每日可分别抽取：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
-• 结果会附带被抽中成员的头像
-• 自动排除Bot和发起者本人，以及配置中指定的排除用户
-• 每日0点自动重置记录（第一次触发时）
+    📝 使用说明：
+    • 每人每日可分别抽取：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
+    • 结果会附带被抽中成员的头像
+    • 自动排除Bot和发起者本人，以及配置中指定的排除用户
+    • 每日0点自动重置记录（第一次触发时）
 
-⚙️ 当前配置：
-• 每日限制：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
-• 排除用户：{excluded_count} 个
-"""
+    ⚙️ 当前配置：
+    • 每日限制：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
+    • 排除用户：{excluded_count} 个
+    """
         yield event.plain_result(help_text)
     
     async def terminate(self):
