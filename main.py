@@ -9,18 +9,15 @@ from astrbot.api import logger, AstrBotConfig
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent 
 import astrbot.api.message_components as Comp
 
-class RandomDogPlugin(Star):
+class RandomIdentityPlugin(Star):
     """
-    AstrBot随机抽狗狗插件
+    AstrBot 随机抽身份插件
     功能：
-    1. 随机抽取群友作为"狗狗"（排除Bot和指定用户）
-    2. 支持每日抽取次数限制（可配置）
-    3. 持久化保存抽取记录到JSON文件
-    4. 支持@和不@的命令选项
-    5. 查看历史记录功能
-    6. 管理员重置记录功能
-    7. 帮助菜单
-    8. 输出被抽中成员的头像
+    - 随机抽取群友作为不同身份（狗狗/主人/老婆/老公/爸爸），可排除Bot与白名单用户
+    - 支持为不同身份分别设置每日上限（向后兼容 `daily_limit`）
+    - 持久化保存抽取记录到JSON文件
+    - 支持带@与不带@两种模式
+    - 查看历史记录与合并的今日身份展示
     """
     def __init__(self, context: Context, config: AstrBotConfig): 
         """
@@ -29,12 +26,12 @@ class RandomDogPlugin(Star):
         super().__init__(context)
         self.config = config # 保存从框架传入的配置对象，用于后续读取用户配置
         
-        self.data_dir = os.path.join("data", "plugins", "random_dog") # 构建数据存储目录路径（/bot目录/data/plugins/random_dog）
-        self.records_file = os.path.join(self.data_dir, "dog_records.json")
+        self.data_dir = os.path.join("data", "plugins", "random_identity")
+        self.records_file = os.path.join(self.data_dir, "identity_records.json")
         
         os.makedirs(self.data_dir, exist_ok=True)
         self.records = self._load_records()
-        logger.info("随机抽狗狗插件已加载")
+        logger.info("随机抽身份插件已加载")
 
     # 从文件加载记录
     def _load_records(self) -> Dict[str, Any]: 
@@ -91,7 +88,7 @@ class RandomDogPlugin(Star):
             return 0
 
         group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        return sum(1 for record in group_records if record.get("user_id") == user_id and record.get("type", "dog") == kind)
+        return sum(1 for record in group_records if record.get("user_id") == user_id and record.get("type") == kind)
 
     # 添加抽取历史记录
     def _add_record(self, group_id: str, user_id: str, subject_id: str, subject_name: str, with_at: bool, kind: str = 'dog'):
@@ -114,79 +111,120 @@ class RandomDogPlugin(Star):
     
     @filter.command("今日狗狗", alias={'抽狗狗'})
     async def draw_dog_with_at(self, event: AstrMessageEvent):
-        """抽取今日狗狗（带@功能），别名“抽狗狗”"""
-        async for result in self._draw_dog_common(event, with_at=True):
-            yield result
-    
-    @filter.command("抽狗狗-@",alias={'今日狗狗-@'})
+        async for r in self._draw_identity_common(event, kind='dog', with_at=True):
+            yield r
+
+    @filter.command("抽狗狗-@", alias={'今日狗狗-@'})
     async def draw_dog_without_at(self, event: AstrMessageEvent):
-        """抽取今日狗狗（不带@功能），别名“今日狗狗-@”"""
-        async for result in self._draw_dog_common(event, with_at=False):
-            yield result
-    
-    # 抽取方法
-    async def _draw_dog_common(self, event: AstrMessageEvent, with_at: bool):
+        async for r in self._draw_identity_common(event, kind='dog', with_at=False):
+            yield r
+
+    @filter.command("抽主人", alias={'今日主人'})
+    async def draw_owner_with_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='owner', with_at=True):
+            yield r
+
+    @filter.command("抽主人-@", alias={'今日主人-@'})
+    async def draw_owner_without_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='owner', with_at=False):
+            yield r
+
+    @filter.command("抽老婆", alias={'今日老婆'})
+    async def draw_wife_with_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='wife', with_at=True):
+            yield r
+
+    @filter.command("抽老婆-@", alias={'今日老婆-@'})
+    async def draw_wife_without_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='wife', with_at=False):
+            yield r
+
+    @filter.command("抽老公", alias={'今日老公'})
+    async def draw_husband_with_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='husband', with_at=True):
+            yield r
+
+    @filter.command("抽老公-@", alias={'今日老公-@'})
+    async def draw_husband_without_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='husband', with_at=False):
+            yield r
+
+    @filter.command("抽爸爸", alias={'今日爸爸'})
+    async def draw_father_with_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='father', with_at=True):
+            yield r
+
+    @filter.command("抽爸爸-@", alias={'今日爸爸-@'})
+    async def draw_father_without_at(self, event: AstrMessageEvent):
+        async for r in self._draw_identity_common(event, kind='father', with_at=False):
+            yield r
+
+    async def _draw_identity_common(self, event: AstrMessageEvent, kind: str = 'dog', with_at: bool = True):
         if event.is_private_chat():
-            yield event.plain_result("抽狗狗功能仅在群聊中可用哦~")
+            yield event.plain_result("该功能仅在群聊中可用哦~")
             return
-        
-        user_id = event.get_sender_id() # 获取发送者ID
-        group_id = event.get_group_id() # 获取群聊ID
-        bot_id = event.get_self_id() # 获取机器人自身ID
-        
+
+        user_id = event.get_sender_id()
+        group_id = event.get_group_id()
+        bot_id = event.get_self_id()
         if not group_id:
             yield event.plain_result("无法获取群组信息")
             return
-        
-        daily_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
-        today_count = self._get_today_count(group_id, user_id, kind='dog')
+
+        cfg_key = f"daily_limit_{kind}"
+        daily_limit = self.config.get(cfg_key, self.config.get("daily_limit", 3))
+        today_count = self._get_today_count(group_id, user_id, kind=kind)
         if today_count >= daily_limit:
-            yield event.plain_result(f"你今天已经抽了{today_count}次狗狗了，明天再来吧！")
+            yield event.plain_result(f"你今天已经抽了{today_count}次{kind}了，明天再来吧！")
             return
-        
+
         members = await self._get_group_members(event)
         if not members:
-            yield event.plain_result("暂时无法获取群成员列表，请确保Bot有相应权限（可能在获取的时候就被踢了？）")
+            yield event.plain_result("暂时无法获取群成员列表，请确保Bot有相应权限")
             return
-        
+
         excluded = {str(uid) for uid in self.config.get("excluded_users", [])}
         excluded.add(str(bot_id))
         excluded.add(str(user_id))
-        
+
         available_members = [m for m in members if str(m.get("user_id", "")) not in excluded]
         if not available_members:
             yield event.plain_result("群里没有可以抽取的成员哦~")
             return
-        
-        dog = random.choice(available_members)
-        dog_id, dog_name = dog.get("user_id"), dog.get("card") or dog.get("nickname") or f"用户{dog.get('user_id')}"
-        
-        self._add_record(group_id, user_id, str(dog_id), dog_name, with_at, kind='dog') 
-        
-        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={dog_id}&spec=640"
-        remaining = daily_limit - today_count - 1
-        
-        text_content = f" 你的今日狗狗是：\n"
 
+        target = random.choice(available_members)
+        target_id = target.get("user_id")
+        target_name = target.get("card") or target.get("nickname") or f"用户{target.get('user_id')}"
+
+        self._add_record(group_id, user_id, str(target_id), target_name, with_at, kind=kind)
+
+        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={target_id}&spec=640"
+        remaining = daily_limit - today_count - 1
+
+        labels = {
+            'dog': '狗狗', 'owner': '主人', 'wife': '老婆', 'husband': '老公', 'father': '爸爸'
+        }
+        label = labels.get(kind, kind)
+
+        text_content = f"  你的今日{label}是：\n"
         if with_at:
-            dog_info_text = f"\u200b"
+            info_text = f"\u200b"
         else:
-            dog_info_text = f"\n{dog_name}"
+            info_text = f"\n{target_name}"
 
         remaining_text = f"\r剩余抽取次数：{remaining}次"
-
 
         chain = [
             Comp.At(qq=user_id),
             Comp.Plain(text_content),
-            Comp.Image.fromURL(avatar_url), 
-]
+            Comp.Image.fromURL(avatar_url),
+        ]
 
         if with_at:
-            chain.append(Comp.At(qq=dog_id))
-            chain.append(Comp.Plain(dog_info_text + remaining_text))
+            chain.append(Comp.At(qq=target_id))
+            chain.append(Comp.Plain(info_text + remaining_text))
         else:
-            chain.append(Comp.Plain(dog_info_text + remaining_text))
+            chain.append(Comp.Plain(info_text + remaining_text))
 
         yield event.chain_result(chain)
     
@@ -206,7 +244,7 @@ class RandomDogPlugin(Star):
             self._reset_daily_records()
         
         group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type", "dog") == 'dog']
+        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'dog']
         
         if not user_records:
             yield event.plain_result("你今天还没有抽过狗狗哦~")
@@ -223,81 +261,119 @@ class RandomDogPlugin(Star):
         result.append(f"剩余次数：{remaining}次")
         yield event.plain_result("\n".join(result))
 
-    @filter.command("今日主人", alias={'抽主人'})
-    async def draw_owner_with_at(self, event: AstrMessageEvent):
-        """抽取今日主人（带@），别名“抽主人”"""
-        async for result in self._draw_owner_common(event, with_at=True):
-            yield result
-
-    @filter.command("抽主人-@",alias={'今日主人-@'})
-    async def draw_owner_without_at(self, event: AstrMessageEvent):
-        """抽取今日主人（不带@），别名“今日主人-@”"""
-        async for result in self._draw_owner_common(event, with_at=False):
-            yield result
-
-    async def _draw_owner_common(self, event: AstrMessageEvent, with_at: bool):
+    @filter.command("我的老婆", alias={'老婆历史'})
+    async def show_my_wifes(self, event: AstrMessageEvent):
         if event.is_private_chat():
-            yield event.plain_result("抽主人功能仅在群聊中可用哦~")
+            yield event.plain_result("此功能仅在群聊中可用哦~")
             return
-        
-        user_id = event.get_sender_id()
-        group_id = event.get_group_id()
-        bot_id = event.get_self_id()
-        
+        user_id, group_id = event.get_sender_id(), event.get_group_id()
         if not group_id:
             yield event.plain_result("无法获取群组信息")
             return
-
-        daily_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
-        today_count = self._get_today_count(group_id, user_id, kind='owner')
-        if today_count >= daily_limit:
-            yield event.plain_result(f"你今天已经抽了{today_count}次主人了，明天再来吧！")
+        if self._is_new_day():
+            self._reset_daily_records()
+        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
+        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'wife']
+        if not user_records:
+            yield event.plain_result("你今天还没有抽过老婆哦~")
             return
+        daily_limit = self.config.get("daily_limit_wife", self.config.get("daily_limit", 3))
+        result = [f"你今天的老婆记录({len(user_records)}/{daily_limit})："]
+        for i, record in enumerate(user_records, 1):
+            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
+            at_status = "(@)" if record.get("with_at", False) else ""
+            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
+        remaining = daily_limit - len(user_records)
+        result.append(f"剩余次数：{remaining}次")
+        yield event.plain_result("\n".join(result))
 
-        members = await self._get_group_members(event)
-        if not members:
-            yield event.plain_result("暂时无法获取群成员列表，请确保Bot有相应权限（可能在获取的时候就被踢了？）")
+    @filter.command("我的老公", alias={'老公历史'})
+    async def show_my_husbands(self, event: AstrMessageEvent):
+        if event.is_private_chat():
+            yield event.plain_result("此功能仅在群聊中可用哦~")
             return
-
-        excluded = {str(uid) for uid in self.config.get("excluded_users", [])}
-        excluded.add(str(bot_id))
-        excluded.add(str(user_id))
-
-        available_members = [m for m in members if str(m.get("user_id", "")) not in excluded]
-        if not available_members:
-            yield event.plain_result("群里没有可以抽取的成员哦~")
+        user_id, group_id = event.get_sender_id(), event.get_group_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
             return
+        if self._is_new_day():
+            self._reset_daily_records()
+        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
+        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'husband']
+        if not user_records:
+            yield event.plain_result("你今天还没有抽过老公哦~")
+            return
+        daily_limit = self.config.get("daily_limit_husband", self.config.get("daily_limit", 3))
+        result = [f"你今天的老公记录({len(user_records)}/{daily_limit})："]
+        for i, record in enumerate(user_records, 1):
+            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
+            at_status = "(@)" if record.get("with_at", False) else ""
+            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
+        remaining = daily_limit - len(user_records)
+        result.append(f"剩余次数：{remaining}次")
+        yield event.plain_result("\n".join(result))
 
-        owner = random.choice(available_members)
-        owner_id, owner_name = owner.get("user_id"), owner.get("card") or owner.get("nickname") or f"用户{owner.get('user_id')}"
+    @filter.command("我的爸爸", alias={'爸爸历史'})
+    async def show_my_fathers(self, event: AstrMessageEvent):
+        if event.is_private_chat():
+            yield event.plain_result("此功能仅在群聊中可用哦~")
+            return
+        user_id, group_id = event.get_sender_id(), event.get_group_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
+            return
+        if self._is_new_day():
+            self._reset_daily_records()
+        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
+        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'father']
+        if not user_records:
+            yield event.plain_result("你今天还没有抽过爸爸哦~")
+            return
+        daily_limit = self.config.get("daily_limit_father", self.config.get("daily_limit", 3))
+        result = [f"你今天的爸爸记录({len(user_records)}/{daily_limit})："]
+        for i, record in enumerate(user_records, 1):
+            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
+            at_status = "(@)" if record.get("with_at", False) else ""
+            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
+        remaining = daily_limit - len(user_records)
+        result.append(f"剩余次数：{remaining}次")
+        yield event.plain_result("\n".join(result))
 
-        self._add_record(group_id, user_id, str(owner_id), owner_name, with_at, kind='owner')
+    @filter.command("今日身份", alias={'我的身份'})
+    async def show_today_identities(self, event: AstrMessageEvent):
+        if event.is_private_chat():
+            yield event.plain_result("此功能仅在群聊中可用哦~")
+            return
+        user_id, group_id = event.get_sender_id(), event.get_group_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
+            return
+        if self._is_new_day():
+            self._reset_daily_records()
+        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
 
-        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={owner_id}&spec=640"
-        remaining = daily_limit - today_count - 1
+        kinds = [('dog', '狗狗', self.config.get('daily_limit_dog', self.config.get('daily_limit', 3))),
+                 ('owner', '主人', self.config.get('daily_limit_owner', self.config.get('daily_limit', 3))),
+                 ('wife', '老婆', self.config.get('daily_limit_wife', self.config.get('daily_limit', 3))),
+                 ('husband', '老公', self.config.get('daily_limit_husband', self.config.get('daily_limit', 3))),
+                 ('father', '爸爸', self.config.get('daily_limit_father', self.config.get('daily_limit', 3)))]
 
-        text_content = f"  你的今日主人是：\n"
+        parts = []
+        for kind, label, limit in kinds:
+            records = [r for r in group_records if r.get('user_id') == user_id and r.get('type') == kind]
+            if not records:
+                continue
+            parts.append(f"{label} ({len(records)}/{limit})：")
+            for i, record in enumerate(records, 1):
+                time_str = datetime.fromisoformat(record['timestamp']).strftime('%H:%M:%S')
+                at_status = '(@)' if record.get('with_at', False) else ''
+                parts.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
+            parts.append("")
 
-        if with_at:
-            owner_info_text = f"\u200b"
-        else:
-            owner_info_text = f"\n{owner_name}"
-
-        remaining_text = f"\r剩余抽取次数：{remaining}次"
-
-        chain = [
-            Comp.At(qq=user_id),
-            Comp.Plain(text_content),
-            Comp.Image.fromURL(avatar_url), 
-        ]
-
-        if with_at:
-            chain.append(Comp.At(qq=owner_id))
-            chain.append(Comp.Plain(owner_info_text + remaining_text))
-        else:
-            chain.append(Comp.Plain(owner_info_text + remaining_text))
-
-        yield event.chain_result(chain)
+        if not parts:
+            yield event.plain_result("你今天还没有抽过任何身份哦~")
+            return
+        yield event.plain_result('\n'.join(parts))
 
     @filter.command("我的主人", alias={'主人历史'})
     async def show_my_owners(self, event: AstrMessageEvent):
@@ -315,7 +391,7 @@ class RandomDogPlugin(Star):
             self._reset_daily_records()
         
         group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type", "dog") == 'owner']
+        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'owner']
         
         if not user_records:
             yield event.plain_result("你今天还没有抽过主人哦~")
@@ -339,38 +415,37 @@ class RandomDogPlugin(Star):
         self._reset_daily_records()
         yield event.plain_result("今日抽取记录已重置！")
 
-    @filter.command("抽狗狗帮助" , alias={'今日狗狗帮助'})
+    @filter.command("抽狗狗帮助" , alias={'今日狗狗帮助','抽身份帮助','今日身份帮助'})
     async def show_help(self, event: AstrMessageEvent):
-        """显示帮助，别名“今日狗狗帮助”"""
+        """显示帮助，别名“抽身份帮助”“今日身份帮助”"""
         dog_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
         owner_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
+        wife_limit = self.config.get("daily_limit_wife", self.config.get("daily_limit", 3))
+        husband_limit = self.config.get("daily_limit_husband", self.config.get("daily_limit", 3))
+        father_limit = self.config.get("daily_limit_father", self.config.get("daily_limit", 3))
         excluded_count = len(self.config.get("excluded_users", []))
-        help_text = f"""=== 抽狗狗/抽主人 帮助 v2.0.7 ===
+        help_text = f"""=== 抽身份 插件 帮助 v2.0.9 ===
         
 🎯 主要功能：
+• 今日身份 - 列出你今天抽到的所有身份（狗狗/主人/老婆/老公/爸爸）
 • 今日狗狗 / 抽狗狗 - 随机抽取群友作为今日狗狗（带@）
-• 抽狗狗-@ / 今日狗狗-@
-    - 随机抽取群友（不带@）
+• 抽狗狗-@ / 今日狗狗-@ - 不带@
 • 今日主人 / 抽主人 - 随机抽取群友作为今日主人（带@）
-• 抽主人-@ / 今日主人-@
-    - 随机抽取群友（不带@）
-• 我的狗狗 / 抽取历史 
-    - 查看今天的狗狗抽取记录
-• 我的主人 / 主人历史
-    - 查看今天的主人抽取记录
-• 重置记录
-    - 管理员专用，重置今日记录
-• 抽狗狗帮助 / 今日狗狗帮助
-    - 查看该帮助
+• 抽主人-@ / 今日主人-@ - 不带@
+• 抽老婆 / 抽老婆-@ - 抽取老婆（带/不带@）
+• 抽老公 / 抽老公-@ - 抽取老公（带/不带@）
+• 抽爸爸 / 抽爸爸-@ - 抽取爸爸（带/不带@）
+• 我的狗狗 / 我的主人 / 我的老婆 / 我的老公 / 我的爸爸 - 查看各自的今日记录
+• 重置记录 - 管理员专用，重置今日记录
 
 📝 使用说明：
-• 每人每日可抽取：狗狗 {dog_limit} 次，主人 {owner_limit} 次（分别计数）
+• 每人每日可分别抽取：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
 • 结果会附带被抽中成员的头像
-• 自动排除Bot和发起者本人
-• 每日0点自动重置记录
+• 自动排除Bot和发起者本人，以及配置中指定的排除用户
+• 每日0点自动重置记录（第一次触发时）
 
 ⚙️ 当前配置：
-• 每日限制：狗狗 {dog_limit} 次，主人 {owner_limit} 次
+• 每日限制：狗狗 {dog_limit} 次，主人 {owner_limit} 次，老婆 {wife_limit} 次，老公 {husband_limit} 次，爸爸 {father_limit} 次
 • 排除用户：{excluded_count} 个
 """
         yield event.plain_result(help_text)
@@ -378,6 +453,6 @@ class RandomDogPlugin(Star):
     async def terminate(self):
         try:
             self._save_records()
-            logger.info("抽狗狗插件资源已清理完毕")
+            logger.info("随机抽身份插件资源已清理完毕")
         except Exception as e:
             logger.error(f"插件终止时出现错误: {e}")

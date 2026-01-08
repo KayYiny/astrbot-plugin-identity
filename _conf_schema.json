@@ -17,6 +17,24 @@
         "description": "每位用户每天可以抽取主人的次数上限。优先级高于兼容项 `daily_limit`。",
         "default": 3
     },
+    "daily_limit_wife": {
+        "type": "int",
+        "title": "每日抽老婆上限",
+        "description": "每位用户每天可以抽取老婆的次数上限。优先级高于兼容项 `daily_limit`。",
+        "default": 3
+    },
+    "daily_limit_husband": {
+        "type": "int",
+        "title": "每日抽老公上限",
+        "description": "每位用户每天可以抽取老公的次数上限。优先级高于兼容项 `daily_limit`。",
+        "default": 3
+    },
+    "daily_limit_father": {
+        "type": "int",
+        "title": "每日抽爸爸上限",
+        "description": "每位用户每天可以抽取爸爸的次数上限。优先级高于兼容项 `daily_limit`。",
+        "default": 3
+    },
     "excluded_users": {
         "type": "list",
         "title": "排除用户列表",
