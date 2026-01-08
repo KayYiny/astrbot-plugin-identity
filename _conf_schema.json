@@ -1,12 +1,24 @@
 {
     "daily_limit": {
         "type": "int",
-        "title": "每日抽取上限",
-        "description": "每位用户每天可以抽取老婆的次数上限。",
+        "title": "每日抽取上限（兼容）",
+        "description": "向后兼容：若未设置单独的狗狗/主人上限则使用此值。",
+        "default": 3
+    },
+    "daily_limit_dog": {
+        "type": "int",
+        "title": "每日抽狗狗上限",
+        "description": "每位用户每天可以抽取狗狗的次数上限。优先级高于兼容项 `daily_limit`。",
+        "default": 3
+    },
+    "daily_limit_owner": {
+        "type": "int",
+        "title": "每日抽主人上限",
+        "description": "每位用户每天可以抽取主人的次数上限。优先级高于兼容项 `daily_limit`。",
         "default": 3
     },
     "excluded_users": {
-        "type": "list",  
+        "type": "list",
         "title": "排除用户列表",
         "description": "在此列表中的QQ号将不会被抽中。请每行填写一个QQ号。",
         "default": [],

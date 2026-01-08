@@ -138,7 +138,7 @@ class RandomDogPlugin(Star):
             yield event.plain_result("无法获取群组信息")
             return
         
-        daily_limit = self.config.get("daily_limit", 3)
+        daily_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
         today_count = self._get_today_count(group_id, user_id, kind='dog')
         if today_count >= daily_limit:
             yield event.plain_result(f"你今天已经抽了{today_count}次狗狗了，明天再来吧！")
@@ -212,7 +212,7 @@ class RandomDogPlugin(Star):
             yield event.plain_result("你今天还没有抽过狗狗哦~")
             return
         
-        daily_limit = self.config.get("daily_limit", 3)
+        daily_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
         result = [f"你今天的狗狗记录({len(user_records)}/{daily_limit})："]
         for i, record in enumerate(user_records, 1):
             time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
@@ -248,7 +248,7 @@ class RandomDogPlugin(Star):
             yield event.plain_result("无法获取群组信息")
             return
 
-        daily_limit = self.config.get("daily_limit", 3)
+        daily_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
         today_count = self._get_today_count(group_id, user_id, kind='owner')
         if today_count >= daily_limit:
             yield event.plain_result(f"你今天已经抽了{today_count}次主人了，明天再来吧！")
@@ -321,7 +321,7 @@ class RandomDogPlugin(Star):
             yield event.plain_result("你今天还没有抽过主人哦~")
             return
         
-        daily_limit = self.config.get("daily_limit", 3)
+        daily_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
         result = [f"你今天的主人记录({len(user_records)}/{daily_limit})："]
         for i, record in enumerate(user_records, 1):
             time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
@@ -342,7 +342,8 @@ class RandomDogPlugin(Star):
     @filter.command("抽狗狗帮助" , alias={'今日狗狗帮助'})
     async def show_help(self, event: AstrMessageEvent):
         """显示帮助，别名“今日狗狗帮助”"""
-        daily_limit = self.config.get("daily_limit", 3)
+        dog_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
+        owner_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
         excluded_count = len(self.config.get("excluded_users", []))
         help_text = f"""=== 抽狗狗/抽主人 帮助 v2.0.7 ===
         
@@ -363,13 +364,13 @@ class RandomDogPlugin(Star):
     - 查看该帮助
 
 📝 使用说明：
-• 每人每日可抽取 {daily_limit} 次（狗狗/主人分别计数）
+• 每人每日可抽取：狗狗 {dog_limit} 次，主人 {owner_limit} 次（分别计数）
 • 结果会附带被抽中成员的头像
 • 自动排除Bot和发起者本人
 • 每日0点自动重置记录
 
 ⚙️ 当前配置：
-• 每日限制：{daily_limit} 次
+• 每日限制：狗狗 {dog_limit} 次，主人 {owner_limit} 次
 • 排除用户：{excluded_count} 个
 """
         yield event.plain_result(help_text)

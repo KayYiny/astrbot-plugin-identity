@@ -1,5 +1,6 @@
 name: 抽狗狗
-desc: "这是用于抽取群友当狗狗/主人的插件。支持每日刷新抽取次数、分别统计狗狗与主人的次数并可自定义配置。"
-version: v2.0.7
-author: 糯米茨
-repo: https://github.com/nuomicici/astrbot-plugin-choulaopo
+desc: "这是用于抽取群友当狗狗/主人的插件。支持每日刷新抽取次数、分别统计狗狗与主人的次数并可自定义配置。此仓为 fork，包含额外功能与配置。"
+version: v2.0.8
+author: KayYiny (fork)
+repo: https://github.com/KayYiny/astrbot-plugin-chougou
+original_repo: https://github.com/nuomicici/astrbot-plugin-choulaopo

@@ -1,12 +1,12 @@
 <div align="center">
 <img style="width:70%" src="https://count.getloli.com/@astrbot-plugin-choulaopo?name=astrbot-plugin-choulaopo&theme=gelbooru&padding=5&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt=":name">
 
-# 随机抽狗狗插件 v2.0.7
-一个简单的 AstrBot 插件，允许群组成员每天随机抽取另一位群友作为他们的“今日狗狗”。v2.0.0 版本经过了完全的重构，优化了代码结构，提升了运行效率和稳定性，并为未来的功能扩展打下了坚实的基础。
+# 随机抽狗狗插件 v2.0.8 (Fork by KayYiny)
+这是由 `KayYiny` fork 并扩展的版本，包含对狗狗/主人的独立每日上限配置等功能改进。原项目见 original_repo 字段。此仓库为此分支的更新源，插件市场/更新请指向本仓库以避免被上游覆盖。
 
 
-[![GitHub](https://img.shields.io/badge/GitHub-astrbot--plugin--choulaopo-blue?style=flat-square&logo=github)](https://github.com/astrbot-plugin-choulaopo)
-[![License](https://img.shields.io/github/license/nuomicici/astrbot-plugin-choulaopo?style=flat-square)](https://github.com/nuomicici/astrbot-plugin-choulaopo/blob/main/LICENSE)  
+[![GitHub](https://img.shields.io/badge/GitHub-KayYiny/astrbot--plugin--chougou-blue?style=flat-square&logo=github)](https://github.com/KayYiny/astrbot-plugin-chougou)
+[![License](https://img.shields.io/github/license/KayYiny/astrbot-plugin-chougou?style=flat-square)](https://github.com/KayYiny/astrbot-plugin-chougou/blob/main/LICENSE)  
 [QQ群](https://qm.qq.com/q/r20HdxCvBe)忘了该怎么写那个卡片了将就着用吧，有bug啥的都可以来
 </div>
 
@@ -62,11 +62,11 @@
 
 ### 安装
 
-1. 在插件市场搜索“抽狗狗”或“糯米茨”即可安装
+1. 在插件市场搜索“抽狗狗”或“糯米茨”即可安装（请确保指向本 fork 的更新源）
 2. 或者可以直接克隆源码到插件文件夹：
 ```
 cd /AstrBot/data/plugins
-git clone https://github.com/nuomicici/astrbot-plugin-choulaopo/
+git clone https://github.com/KayYiny/astrbot-plugin-chougou/
 # 控制台重启AstrBot
 ```
 
