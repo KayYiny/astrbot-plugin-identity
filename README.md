@@ -1,15 +1,7 @@
-<div align="center">
-<img style="width:70%" src="https://count.getloli.com/@astrbot-plugin-choulaopo?name=astrbot-plugin-choulaopo&theme=gelbooru&padding=5&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt=":name">
-
 # 随机抽身份插件 v2.0.9 (Fork by KayYiny)
 这是由 `KayYiny` fork 并扩展的版本，新增了对多种身份（狗狗/主人/老婆/老公/爸爸）的支持，并为每种身份提供独立的每日上限配置（并保留向后兼容的 `daily_limit`）。原项目见 `original_repo` 字段。此仓库为此分支的更新源，插件市场/更新请指向本仓库以避免被上游覆盖。
 
-
-[![GitHub](https://img.shields.io/badge/GitHub-KayYiny/astrbot--plugin--chougou-blue?style=flat-square&logo=github)](https://github.com/KayYiny/astrbot-plugin-chougou)
-[![License](https://img.shields.io/github/license/KayYiny/astrbot-plugin-chougou?style=flat-square)](https://github.com/KayYiny/astrbot-plugin-chougou/blob/main/LICENSE)  
-[QQ群](https://qm.qq.com/q/r20HdxCvBe)忘了该怎么写那个卡片了将就着用吧，有bug啥的都可以来
-</div>
-
+原仓库: https://github.com/nuomicici/astrbot-plugin-choulaopo
 
 ---
 ## 2.0.7
