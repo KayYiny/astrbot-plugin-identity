@@ -109,53 +109,63 @@ class RandomIdentityPlugin(Star):
         self._save_records()
         logger.info(f"用户{user_id}在群{group_id}抽取了{subject_name}({subject_id}) 类型={kind}")
     
-    @filter.command("今日狗狗", alias={'抽狗狗'})
+    @filter.command("今日狗狗@", alias={'抽狗狗@'})
     async def draw_dog_with_at(self, event: AstrMessageEvent):
+        """抽狗狗（带@），别名：抽狗狗@。会 @ 被抽中的成员并附带头像。"""
         async for r in self._draw_identity_common(event, kind='dog', with_at=True):
             yield r
 
-    @filter.command("抽狗狗-@", alias={'今日狗狗-@'})
+    @filter.command("今日狗狗", alias={'抽狗狗'})
     async def draw_dog_without_at(self, event: AstrMessageEvent):
+        """抽狗狗（不带@），别名：抽狗狗。只显示昵称并附带头像。"""
         async for r in self._draw_identity_common(event, kind='dog', with_at=False):
             yield r
 
-    @filter.command("抽主人", alias={'今日主人'})
+    @filter.command("今日主人@", alias={'抽主人@'})
     async def draw_owner_with_at(self, event: AstrMessageEvent):
+        """抽主人（带@），别名：抽主人@。会 @ 被抽中的成员并附带头像。"""
         async for r in self._draw_identity_common(event, kind='owner', with_at=True):
             yield r
 
-    @filter.command("抽主人-@", alias={'今日主人-@'})
+    @filter.command("今日主人", alias={'抽主人'})
     async def draw_owner_without_at(self, event: AstrMessageEvent):
+        """抽主人（不带@），别名：抽主人。只显示昵称并附带头像。"""
         async for r in self._draw_identity_common(event, kind='owner', with_at=False):
             yield r
 
-    @filter.command("抽老婆", alias={'今日老婆'})
+    @filter.command("今日老婆@", alias={'抽老婆@'})
     async def draw_wife_with_at(self, event: AstrMessageEvent):
+        """抽老婆（带@），别名：抽老婆@。会 @ 被抽中的成员并附带头像。"""
         async for r in self._draw_identity_common(event, kind='wife', with_at=True):
             yield r
 
-    @filter.command("抽老婆-@", alias={'今日老婆-@'})
+    @filter.command("今日老婆", alias={'抽老婆'})
     async def draw_wife_without_at(self, event: AstrMessageEvent):
+        """抽老婆（不带@），别名：抽老婆。只显示昵称并附带头像。"""
         async for r in self._draw_identity_common(event, kind='wife', with_at=False):
             yield r
 
-    @filter.command("抽老公", alias={'今日老公'})
+    @filter.command("今日老公@", alias={'抽老公@'})
     async def draw_husband_with_at(self, event: AstrMessageEvent):
+        """抽老公（带@），别名：抽老公@。会 @ 被抽中的成员并附带头像。"""
         async for r in self._draw_identity_common(event, kind='husband', with_at=True):
             yield r
 
-    @filter.command("抽老公-@", alias={'今日老公-@'})
+    @filter.command("今日老公", alias={'抽老公'})
     async def draw_husband_without_at(self, event: AstrMessageEvent):
+        """抽老公（不带@），别名：抽老公。只显示昵称并附带头像。"""
         async for r in self._draw_identity_common(event, kind='husband', with_at=False):
             yield r
 
-    @filter.command("抽爸爸", alias={'今日爸爸'})
+    @filter.command("今日爸爸@", alias={'抽爸爸@'})
     async def draw_father_with_at(self, event: AstrMessageEvent):
+        """抽爸爸（带@），别名：抽爸爸@。会 @ 被抽中的成员并附带头像。"""
         async for r in self._draw_identity_common(event, kind='father', with_at=True):
             yield r
 
-    @filter.command("抽爸爸-@", alias={'今日爸爸-@'})
+    @filter.command("今日爸爸", alias={'抽爸爸'})
     async def draw_father_without_at(self, event: AstrMessageEvent):
+        """抽爸爸（不带@），别名：抽爸爸。只显示昵称并附带头像。"""
         async for r in self._draw_identity_common(event, kind='father', with_at=False):
             yield r
 
@@ -230,7 +240,7 @@ class RandomIdentityPlugin(Star):
     
     @filter.command("我的狗狗", alias={'抽取历史'})
     async def show_my_dogs(self, event: AstrMessageEvent):
-        """显示用户的抽取历史（我的狗狗），别名“抽取历史”"""
+        """查看你今天抽到的狗狗记录与剩余次数（按时间排序）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return # 结束
@@ -263,6 +273,7 @@ class RandomIdentityPlugin(Star):
 
     @filter.command("我的老婆", alias={'老婆历史'})
     async def show_my_wifes(self, event: AstrMessageEvent):
+        """查看你今天抽到的老婆记录与剩余次数（按时间排序）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -289,6 +300,7 @@ class RandomIdentityPlugin(Star):
 
     @filter.command("我的老公", alias={'老公历史'})
     async def show_my_husbands(self, event: AstrMessageEvent):
+        """查看你今天抽到的老公记录与剩余次数（按时间排序）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -315,6 +327,7 @@ class RandomIdentityPlugin(Star):
 
     @filter.command("我的爸爸", alias={'爸爸历史'})
     async def show_my_fathers(self, event: AstrMessageEvent):
+        """查看你今天抽到的爸爸记录与剩余次数（按时间排序）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -339,8 +352,9 @@ class RandomIdentityPlugin(Star):
         result.append(f"剩余次数：{remaining}次")
         yield event.plain_result("\n".join(result))
 
-    @filter.command("今日身份", alias={'我的身份'})
+    @filter.command("我的身份")
     async def show_today_identities(self, event: AstrMessageEvent):
+        """显示你今天抽到的所有身份（仅列出已抽取的身份及对应记录）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -377,7 +391,7 @@ class RandomIdentityPlugin(Star):
 
     @filter.command("我的主人", alias={'主人历史'})
     async def show_my_owners(self, event: AstrMessageEvent):
-        """显示用户的抽取历史（我的主人），别名“主人历史”"""
+        """查看你今天抽到的主人记录与剩余次数（按时间排序）。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -411,13 +425,13 @@ class RandomIdentityPlugin(Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("重置记录")
     async def reset_records(self, event: AstrMessageEvent):
-        """仅bot管理员可使用：重置所有群聊的所有记录（慎用！）"""
+        """管理员命令：重置今日所有群聊的抽取记录（请谨慎使用）。"""
         self._reset_daily_records()
         yield event.plain_result("今日抽取记录已重置！")
 
-    @filter.command("抽狗狗帮助" , alias={'今日狗狗帮助','抽身份帮助','今日身份帮助'})
+    @filter.command("今日身份帮助")
     async def show_help(self, event: AstrMessageEvent):
-        """显示帮助，别名“抽身份帮助”“今日身份帮助”"""
+        """显示插件帮助（命令说明与当前配置）。"""
         dog_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
         owner_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
         wife_limit = self.config.get("daily_limit_wife", self.config.get("daily_limit", 3))
