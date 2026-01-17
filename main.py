@@ -320,11 +320,16 @@ class RandomIdentityPlugin(Star):
             grouped.setdefault(r['label'], []).append(r)
 
         for label, items in grouped.items():
-            chain.append(Comp.Plain(f"{label}：\n"))
+            # 在每个身份组前添加分隔线
+            chain.append(Comp.Plain("------\n"))
             for i, it in enumerate(items, 1):
                 avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={it['target_id']}&spec=640"
                 chain.append(Comp.Image.fromURL(avatar_url))
-                chain.append(Comp.Plain(f"{label}{i}. {it['target_name']} ({it['target_id']})\n"))
+                # 若该身份只有一项，则显示为 "身份 名称 (id)"，多项时使用编号
+                if len(items) == 1:
+                    chain.append(Comp.Plain(f"{label} {it['target_name']} ({it['target_id']})\n"))
+                else:
+                    chain.append(Comp.Plain(f"{label}{i}. {it['target_name']} ({it['target_id']})\n"))
 
         yield event.chain_result(chain)
     
