@@ -208,7 +208,7 @@ class RandomIdentityPlugin(Star):
 
         self._add_record(group_id, user_id, str(target_id), target_name, with_at, kind=kind)
 
-        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={target_id}&spec=640"
+        avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={target_id}&spec=100"
         remaining = daily_limit - today_count - 1
 
         labels = {
