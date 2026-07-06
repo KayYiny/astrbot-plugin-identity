@@ -411,7 +411,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v2.3.0 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.2.1 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
