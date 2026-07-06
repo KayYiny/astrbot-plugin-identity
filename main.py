@@ -181,7 +181,20 @@ class RandomIdentityPlugin(Star):
         # 每个身份每天只能抽一次
         today_count = self._get_today_count(group_id, user_id, kind=kind)
         if today_count >= 1:
-            yield event.plain_result(f"你今天已经抽过{kind}了，明天再来吧！")
+            # 查询今天已经抽到的人
+            self._cursor.execute(
+                "SELECT subject_name FROM draw_records "
+                "WHERE group_id=? AND user_id=? AND kind=? "
+                "AND date(created_at)=date('now','localtime') "
+                "LIMIT 1",
+                (group_id, user_id, kind),
+            )
+            row = self._cursor.fetchone()
+            name = row["subject_name"] if row else ""
+            yield event.plain_result(
+                f"你今天已经抽过{kind}了，明天再来吧！\n"
+                f"当前{kind}是：{name}"
+            )
             return
 
         members = await self._get_group_members(event)
