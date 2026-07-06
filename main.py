@@ -222,7 +222,7 @@ class RandomIdentityPlugin(Star):
         动态匹配「今日{身份}」「抽{身份}」指令。
         如果身份已在配置中则执行抽取，否则跳过。
         """
-        text = event.get_plain_text().strip()
+        text = event.message_str.strip()
         m = re.match(r'^(?:今日|抽)(.+?)(@?)$', text)
         if not m:
             return
