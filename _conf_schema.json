@@ -1,39 +1,13 @@
 {
-    "daily_limit": {
-        "type": "int",
-        "title": "每日抽取上限（兼容）",
-        "description": "向后兼容：若未设置单独的狗狗/主人上限则使用此值。",
-        "default": 3
-    },
-    "daily_limit_dog": {
-        "type": "int",
-        "title": "每日抽狗狗上限",
-        "description": "每位用户每天可以抽取狗狗的次数上限。优先级高于兼容项 `daily_limit`。",
-        "default": 3
-    },
-    "daily_limit_owner": {
-        "type": "int",
-        "title": "每日抽主人上限",
-        "description": "每位用户每天可以抽取主人的次数上限。优先级高于兼容项 `daily_limit`。",
-        "default": 3
-    },
-    "daily_limit_wife": {
-        "type": "int",
-        "title": "每日抽老婆上限",
-        "description": "每位用户每天可以抽取老婆的次数上限。优先级高于兼容项 `daily_limit`。",
-        "default": 3
-    },
-    "daily_limit_husband": {
-        "type": "int",
-        "title": "每日抽老公上限",
-        "description": "每位用户每天可以抽取老公的次数上限。优先级高于兼容项 `daily_limit`。",
-        "default": 3
-    },
-    "daily_limit_father": {
-        "type": "int",
-        "title": "每日抽爸爸上限",
-        "description": "每位用户每天可以抽取爸爸的次数上限。优先级高于兼容项 `daily_limit`。",
-        "default": 3
+    "identities": {
+        "type": "list",
+        "title": "身份角色列表",
+        "description": "每行填写一个身份名称。填好后即可使用「今日{名称}」或「抽{名称}」指令来抽取。每个身份每天只能抽取一次。",
+        "default": [],
+        "items": {
+            "type": "string",
+            "title": "身份名称"
+        }
     },
     "excluded_users": {
         "type": "list",

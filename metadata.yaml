@@ -1,6 +1,6 @@
 name: 随机抽身份
-desc: "用于抽取群友为不同身份（狗狗/主人/老婆/老公/爸爸）的插件。支持每日上限独立配置并保留向后兼容项。此仓为 fork，包含额外功能与配置。"
-version: v2.2.0
+desc: "配置驱动式随机抽取插件：在面板中填写身份角色名称，即可使用「今日{名称}」「抽{名称}」指令随机抽取群友。每个身份每天限抽一次。"
+version: v2.3.0
 author: KayYiny (fork)
 repo: https://github.com/KayYiny/astrbot-plugin-identity
 original_repo: https://github.com/nuomicici/astrbot-plugin-choulaopo
