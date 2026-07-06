@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import sqlite3
 import random
 from datetime import datetime
@@ -28,9 +29,7 @@ class RandomIdentityPlugin(Star):
 
         # 使用插件自身目录下的 data/ 存储数据库，
         # 这样面板删除插件时数据也会被一并清理
-        self.data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "data"
-        )
+        self.data_dir = os.path.join("data", "plugin_data", "随机抽身份")
         self.db_path = os.path.join(self.data_dir, "identity_records.db")
 
         # 自动迁移旧数据目录（random_identity → 插件内 data/）
@@ -44,14 +43,19 @@ class RandomIdentityPlugin(Star):
     # ---------- 数据库 ----------
 
     def _migrate_old_data(self):
-        """从旧的 data/plugins/random_identity 迁移数据库文件。"""
-        old_dir = os.path.join("data", "plugins", "random_identity")
-        old_db = os.path.join(old_dir, "identity_records.db")
-        if os.path.exists(old_db) and not os.path.exists(self.db_path):
-            os.makedirs(self.data_dir, exist_ok=True)
-            import shutil
-            shutil.copy2(old_db, self.db_path)
-            logger.info(f"已迁移旧数据库: {old_db} → {self.db_path}")
+        """从旧版路径迁移数据库文件。"""
+        old_paths = [
+            os.path.join("data", "plugins", "random_identity", "identity_records.db"),
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "data", "identity_records.db"
+            ),
+        ]
+        for old_db in old_paths:
+            if os.path.exists(old_db) and not os.path.exists(self.db_path):
+                os.makedirs(self.data_dir, exist_ok=True)
+                import shutil
+                shutil.copy2(old_db, self.db_path)
+                logger.info(f"已迁移旧数据库: {old_db} → {self.db_path}")
 
     def _cleanup_stale_records(self):
         """清理配置中已删除身份的遗留记录。"""
@@ -211,6 +215,60 @@ class RandomIdentityPlugin(Star):
             f"用户{user_id}在群{group_id}抽取了{subject_name}({subject_id}) 类型={kind}"
         )
 
+
+
+    # ---------- 自动撤回 ----------
+
+    async def _send_with_auto_delete(self, event, chain, group_id) -> bool:
+        """
+        通过 aiocqhttp API 发送消息并在一分钟后自动撤回。
+
+        返回 True 表示已发送（调用方不应再 yield chain_result），
+        False 表示发送失败，调用方应走正常路径 yield。
+        """
+        if event.get_platform_name() != "aiocqhttp":
+            return False
+
+        try:
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+            assert isinstance(event, AiocqhttpMessageEvent)
+            client = event.bot
+        except (ImportError, AssertionError):
+            return False
+
+        # 将消息链转为 aiocqhttp 消息数组
+        msg_array = []
+        for comp in chain:
+            if isinstance(comp, Comp.At):
+                msg_array.append({"type": "at", "data": {"qq": comp.qq}})
+            elif isinstance(comp, Comp.Plain):
+                msg_array.append({"type": "text", "data": {"text": comp.text}})
+            elif isinstance(comp, Comp.Image):
+                msg_array.append({"type": "image", "data": {"file": comp.url}})
+
+        try:
+            result = await client.api.call_action(
+                "send_group_msg", group_id=group_id, message=msg_array
+            )
+            msg_id = result.get("message_id")
+            if msg_id:
+
+                async def _delete():
+                    await asyncio.sleep(60)
+                    try:
+                        await client.api.call_action(
+                            "delete_msg", message_id=msg_id
+                        )
+                    except Exception as e:
+                        logger.warning(f"撤回消息失败: {e}")
+
+                asyncio.create_task(_delete())
+            return True
+        except Exception as e:
+            logger.error(f"通过 API 发送消息失败，降级到框架发送: {e}")
+            return False
     # ---------- 核心抽取逻辑 ----------
 
     async def _draw_identity_common(
@@ -292,7 +350,8 @@ class RandomIdentityPlugin(Star):
         else:
             chain.append(Comp.Plain(target_name))
 
-        yield event.chain_result(chain)
+        if not await self._send_with_auto_delete(event, chain, group_id):
+            yield event.chain_result(chain)
 
     # ---------- 动态指令分发 ----------
 
@@ -392,7 +451,8 @@ class RandomIdentityPlugin(Star):
             chain.append(Comp.Image.fromURL(avatar_url))
             chain.append(Comp.Plain(f" {r['label']}: {r['name']}\n"))
 
-        yield event.chain_result(chain)
+        if not await self._send_with_auto_delete(event, chain, group_id):
+            yield event.chain_result(chain)
 
     # ---------- 今日身份概览 ----------
 
@@ -461,7 +521,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.3.0 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.4.0 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
