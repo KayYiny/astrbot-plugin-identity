@@ -27,11 +27,14 @@ class RandomIdentityPlugin(Star):
         super().__init__(context)
         self.config = config
 
-        # 数据库目录使用插件名，确保面板「删除持久化内容」能正确清理
-        self.data_dir = os.path.join("data", "plugins", "随机抽身份")
+        # 使用插件自身目录下的 data/ 存储数据库，
+        # 这样面板删除插件时数据也会被一并清理
+        self.data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data"
+        )
         self.db_path = os.path.join(self.data_dir, "identity_records.db")
 
-        # 自动迁移旧数据目录（random_identity → 随机抽身份）
+        # 自动迁移旧数据目录（random_identity → 插件内 data/）
         self._migrate_old_data()
 
         os.makedirs(self.data_dir, exist_ok=True)
