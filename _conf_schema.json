@@ -1,0 +1,21 @@
+{
+    "identities": {
+        "type": "list",
+        "title": "身份角色列表",
+        "description": "每行填写一个身份名称。填好后即可使用「今日{名称}」或「抽{名称}」指令来抽取。每个身份每天只能抽取一次。",
+        "default": [],
+        "items": {
+            "type": "string",
+            "title": "身份名称"
+        }
+    },
+    "excluded_users": {
+        "type": "list",
+        "title": "排除用户列表",
+        "description": "在此列表中的QQ号将不会被抽中。请每行填写一个QQ号。",
+        "default": [],
+        "items": {
+            "type": "string"
+        }
+    }
+}

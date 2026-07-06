@@ -1,0 +1,6 @@
+name: 随机抽身份
+desc: "随机抽取插件：在面板中配置身份角色，即可用「今日{名称}」等指令抽取群友。每个身份每天限抽一次。"
+version: v1.0.0
+author: KayYiny (fork)
+repo: https://github.com/KayYiny/astrbot-plugin-identity
+original_repo: https://github.com/nuomicici/astrbot-plugin-choulaopo
