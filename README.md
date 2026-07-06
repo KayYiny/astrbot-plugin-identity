@@ -1,4 +1,4 @@
-# 随机抽身份插件 v2.1.0 (Fork by KayYiny)
+# 随机抽身份插件 v2.2.0 (Fork by KayYiny)
 这是由 `KayYiny` fork 并扩展的版本，新增了对多种身份（狗狗/主人/老婆/老公/爸爸）的支持，并为每种身份提供独立的每日上限配置（并保留向后兼容的 `daily_limit`）。原项目见 `original_repo` 字段。此仓库为此分支的更新源，插件市场/更新请指向本仓库以避免被上游覆盖。
 
 原仓库: https://github.com/nuomicici/astrbot-plugin-choulaopo
@@ -103,6 +103,6 @@ git clone https://github.com/KayYiny/astrbot-plugin-chougou/
 
 ## 📜 开源许可
 
-本插件使用 [MIT License](https://opensource.org/licenses/MIT) 开源。
+本插件使用 [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) 开源。
 
 ## [帮助文档](https://docs.astrbot.app/)
