@@ -1,12 +1,11 @@
 import os
-import json
+import sqlite3
 import random
 from datetime import datetime
 from typing import List, Dict, Any
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent 
 import astrbot.api.message_components as Comp
 
 class RandomIdentityPlugin(Star):
@@ -15,7 +14,7 @@ class RandomIdentityPlugin(Star):
     功能：
     - 随机抽取群友作为不同身份（狗狗/主人/老婆/老公/爸爸），可排除Bot与白名单用户
     - 支持为不同身份分别设置每日上限（向后兼容 `daily_limit`）
-    - 持久化保存抽取记录到JSON文件
+    - 持久化保存抽取记录到 SQLite 数据库
     - 支持带@与不带@两种模式
     - 查看历史记录与合并的今日身份展示
     """
@@ -25,42 +24,58 @@ class RandomIdentityPlugin(Star):
         """
         super().__init__(context)
         self.config = config # 保存从框架传入的配置对象，用于后续读取用户配置
-        
-        self.data_dir = os.path.join("data", "plugins", "random_identity")
-        self.records_file = os.path.join(self.data_dir, "identity_records.json")
-        
-        os.makedirs(self.data_dir, exist_ok=True)
-        self.records = self._load_records()
-        logger.info("随机抽身份插件已加载")
 
-    # 从文件加载记录
-    def _load_records(self) -> Dict[str, Any]: 
-        try: 
-            if os.path.exists(self.records_file):
-                with open(self.records_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {"date": "", "groups": {}}
-        except Exception as e:
-            logger.error(f"加载记录文件失败: {e}")
-            return {"date": "", "groups": {}}
-    # 用于保存记录到文件
-    def _save_records(self):
+        self.data_dir = os.path.join("data", "plugins", "random_identity")
+        self.db_path = os.path.join(self.data_dir, "identity_records.db")
+
+        os.makedirs(self.data_dir, exist_ok=True)
+        self._init_db()
+        logger.info("随机抽身份插件已加载 (SQLite)")
+
+    # 初始化 SQLite 数据库
+    def _init_db(self):
         try:
-            with open(self.records_file, 'w', encoding='utf-8') as f:
-                json.dump(self.records, f, ensure_ascii=False, indent=2)
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS draw_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    subject_id TEXT NOT NULL,
+                    subject_name TEXT NOT NULL,
+                    with_at INTEGER NOT NULL DEFAULT 0,
+                    kind TEXT NOT NULL DEFAULT 'dog',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+                )
+            """)
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+            """)
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_records_lookup ON draw_records(group_id, user_id, kind, created_at)")
+            self._cursor = self._conn.cursor()
+            self._conn.commit()
         except Exception as e:
-            logger.error(f"保存记录文件失败: {e}")
+            logger.error(f"初始化数据库失败: {e}")
+            raise
 
     # 检查是否是新的一天
     def _is_new_day(self) -> bool:
         today = datetime.now().strftime("%Y-%m-%d")
-        return self.records.get("date") != today 
-    # 重置每日记录
+        self._cursor.execute("SELECT value FROM meta WHERE key='current_date'")
+        row = self._cursor.fetchone()
+        stored = row[0] if row else ""
+        return stored != today
+
+    # 重置每日记录：更新日期标记（旧记录保留在数据库中但不影响当日查询）
     def _reset_daily_records(self):
         today = datetime.now().strftime("%Y-%m-%d")
-        self.records = {"date": today, "groups": {}}
-        self._save_records()
-        logger.info("每日抽取记录已重置")
+        self._cursor.execute("REPLACE INTO meta (key, value) VALUES ('current_date', ?)", (today,))
+        self._conn.commit()
+        logger.info("每日记录已更新")
     # 获取群成员列表(仅aiocqhttp平台)
     async def _get_group_members(self, event: AstrMessageEvent) -> List[Dict[str, Any]]:
         try:
@@ -70,6 +85,7 @@ class RandomIdentityPlugin(Star):
                 return []
             
             if event.get_platform_name() == "aiocqhttp":
+                from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
                 assert isinstance(event, AiocqhttpMessageEvent)
                 client = event.bot
                 payloads = {"group_id": group_id, "no_cache": True}
@@ -81,32 +97,25 @@ class RandomIdentityPlugin(Star):
             logger.error(f"获取群成员失败: {e}")
             return []
 
-    # 获取用户今日已抽取次数，若过12点就重置
+    # 获取用户今日已抽取次数（基于 SQLite 日期查询）
     def _get_today_count(self, group_id: str, user_id: str, kind: str = 'dog') -> int:
         if self._is_new_day():
             self._reset_daily_records()
-            return 0
+        self._cursor.execute(
+            "SELECT COUNT(*) FROM draw_records WHERE group_id=? AND user_id=? AND kind=? AND date(created_at)=date('now','localtime')",
+            (group_id, user_id, kind)
+        )
+        return self._cursor.fetchone()[0]
 
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        return sum(1 for record in group_records if record.get("user_id") == user_id and record.get("type") == kind)
-
-    # 添加抽取历史记录
+    # 添加抽取历史记录（写入 SQLite，由数据库保证原子性）
     def _add_record(self, group_id: str, user_id: str, subject_id: str, subject_name: str, with_at: bool, kind: str = 'dog'):
         if self._is_new_day():
             self._reset_daily_records()
-        if group_id not in self.records["groups"]:
-            self.records["groups"][group_id] = {"records": []}
-
-        record = {
-            "user_id": user_id,
-            "subject_id": subject_id,
-            "subject_name": subject_name,
-            "timestamp": datetime.now().isoformat(),
-            "with_at": with_at,
-            "type": kind,
-        }
-        self.records["groups"][group_id]["records"].append(record)
-        self._save_records()
+        self._cursor.execute(
+            "INSERT INTO draw_records (group_id, user_id, subject_id, subject_name, with_at, kind) VALUES (?, ?, ?, ?, ?, ?)",
+            (group_id, user_id, subject_id, subject_name, 1 if with_at else 0, kind)
+        )
+        self._conn.commit()
         logger.info(f"用户{user_id}在群{group_id}抽取了{subject_name}({subject_id}) 类型={kind}")
     
     @filter.command("今日狗狗@", alias={'抽狗狗@'})
@@ -238,6 +247,43 @@ class RandomIdentityPlugin(Star):
 
         yield event.chain_result(chain)
 
+    # 通用历史查看方法，供各身份历史命令调用
+    async def _show_history(self, event: AstrMessageEvent, kind: str, label: str):
+        """查看指定身份的今日抽取记录与剩余次数。"""
+        if event.is_private_chat():
+            yield event.plain_result("此功能仅在群聊中可用哦~")
+            return
+
+        user_id, group_id = event.get_sender_id(), event.get_group_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
+            return
+
+        if self._is_new_day():
+            self._reset_daily_records()
+
+        self._cursor.execute(
+            "SELECT * FROM draw_records WHERE group_id=? AND user_id=? AND kind=? AND date(created_at)=date('now','localtime') ORDER BY created_at",
+            (group_id, user_id, kind)
+        )
+        user_records = [dict(row) for row in self._cursor.fetchall()]
+
+        if not user_records:
+            yield event.plain_result(f"你今天还没有抽过{label}哦~")
+            return
+
+        cfg_key = f"daily_limit_{kind}"
+        daily_limit = self.config.get(cfg_key, self.config.get("daily_limit", 3))
+        result = [f"你今天的{label}记录({len(user_records)}/{daily_limit})："]
+        for i, record in enumerate(user_records, 1):
+            time_str = datetime.fromisoformat(record["created_at"]).strftime("%H:%M:%S")
+            at_status = "(@)" if record.get("with_at") else ""
+            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
+
+        remaining = daily_limit - len(user_records)
+        result.append(f"剩余次数：{remaining}次")
+        yield event.plain_result("\n".join(result))
+
     @filter.command("来随机吧")
     async def roll_all_identities(self, event: AstrMessageEvent):
         """一次性按各身份剩余上限全部抽取并合并发送（默认不 @）。"""
@@ -336,116 +382,26 @@ class RandomIdentityPlugin(Star):
     @filter.command("我的狗狗", alias={'抽取历史'})
     async def show_my_dogs(self, event: AstrMessageEvent):
         """查看你今天抽到的狗狗记录与剩余次数（按时间排序）。"""
-        if event.is_private_chat():
-            yield event.plain_result("此功能仅在群聊中可用哦~")
-            return # 结束
-        
-        user_id, group_id = event.get_sender_id(), event.get_group_id() 
-        if not group_id:
-            yield event.plain_result("无法获取群组信息")
-            return
-        
-        if self._is_new_day():
-            self._reset_daily_records()
-        
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'dog']
-        
-        if not user_records:
-            yield event.plain_result("你今天还没有抽过狗狗哦~")
-            return
-        
-        daily_limit = self.config.get("daily_limit_dog", self.config.get("daily_limit", 3))
-        result = [f"你今天的狗狗记录({len(user_records)}/{daily_limit})："]
-        for i, record in enumerate(user_records, 1):
-            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
-            at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
-        
-        remaining = daily_limit - len(user_records)
-        result.append(f"剩余次数：{remaining}次")
-        yield event.plain_result("\n".join(result))
+        async for r in self._show_history(event, kind='dog', label='狗狗'):
+            yield r
 
     @filter.command("我的老婆", alias={'老婆历史'})
-    async def show_my_wifes(self, event: AstrMessageEvent):
+    async def show_my_wives(self, event: AstrMessageEvent):
         """查看你今天抽到的老婆记录与剩余次数（按时间排序）。"""
-        if event.is_private_chat():
-            yield event.plain_result("此功能仅在群聊中可用哦~")
-            return
-        user_id, group_id = event.get_sender_id(), event.get_group_id()
-        if not group_id:
-            yield event.plain_result("无法获取群组信息")
-            return
-        if self._is_new_day():
-            self._reset_daily_records()
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'wife']
-        if not user_records:
-            yield event.plain_result("你今天还没有抽过老婆哦~")
-            return
-        daily_limit = self.config.get("daily_limit_wife", self.config.get("daily_limit", 3))
-        result = [f"你今天的老婆记录({len(user_records)}/{daily_limit})："]
-        for i, record in enumerate(user_records, 1):
-            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
-            at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
-        remaining = daily_limit - len(user_records)
-        result.append(f"剩余次数：{remaining}次")
-        yield event.plain_result("\n".join(result))
+        async for r in self._show_history(event, kind='wife', label='老婆'):
+            yield r
 
     @filter.command("我的老公", alias={'老公历史'})
     async def show_my_husbands(self, event: AstrMessageEvent):
         """查看你今天抽到的老公记录与剩余次数（按时间排序）。"""
-        if event.is_private_chat():
-            yield event.plain_result("此功能仅在群聊中可用哦~")
-            return
-        user_id, group_id = event.get_sender_id(), event.get_group_id()
-        if not group_id:
-            yield event.plain_result("无法获取群组信息")
-            return
-        if self._is_new_day():
-            self._reset_daily_records()
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'husband']
-        if not user_records:
-            yield event.plain_result("你今天还没有抽过老公哦~")
-            return
-        daily_limit = self.config.get("daily_limit_husband", self.config.get("daily_limit", 3))
-        result = [f"你今天的老公记录({len(user_records)}/{daily_limit})："]
-        for i, record in enumerate(user_records, 1):
-            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
-            at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
-        remaining = daily_limit - len(user_records)
-        result.append(f"剩余次数：{remaining}次")
-        yield event.plain_result("\n".join(result))
+        async for r in self._show_history(event, kind='husband', label='老公'):
+            yield r
 
     @filter.command("我的爸爸", alias={'爸爸历史'})
     async def show_my_fathers(self, event: AstrMessageEvent):
         """查看你今天抽到的爸爸记录与剩余次数（按时间排序）。"""
-        if event.is_private_chat():
-            yield event.plain_result("此功能仅在群聊中可用哦~")
-            return
-        user_id, group_id = event.get_sender_id(), event.get_group_id()
-        if not group_id:
-            yield event.plain_result("无法获取群组信息")
-            return
-        if self._is_new_day():
-            self._reset_daily_records()
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'father']
-        if not user_records:
-            yield event.plain_result("你今天还没有抽过爸爸哦~")
-            return
-        daily_limit = self.config.get("daily_limit_father", self.config.get("daily_limit", 3))
-        result = [f"你今天的爸爸记录({len(user_records)}/{daily_limit})："]
-        for i, record in enumerate(user_records, 1):
-            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
-            at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
-        remaining = daily_limit - len(user_records)
-        result.append(f"剩余次数：{remaining}次")
-        yield event.plain_result("\n".join(result))
+        async for r in self._show_history(event, kind='father', label='爸爸'):
+            yield r
 
     @filter.command("我的身份")
     async def show_today_identities(self, event: AstrMessageEvent):
@@ -459,7 +415,12 @@ class RandomIdentityPlugin(Star):
             return
         if self._is_new_day():
             self._reset_daily_records()
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
+
+        self._cursor.execute(
+            "SELECT * FROM draw_records WHERE group_id=? AND user_id=? AND date(created_at)=date('now','localtime') ORDER BY kind, created_at",
+            (group_id, user_id)
+        )
+        all_records = [dict(row) for row in self._cursor.fetchall()]
 
         kinds = [('dog', '狗狗', self.config.get('daily_limit_dog', self.config.get('daily_limit', 3))),
                  ('owner', '主人', self.config.get('daily_limit_owner', self.config.get('daily_limit', 3))),
@@ -469,13 +430,13 @@ class RandomIdentityPlugin(Star):
 
         parts = []
         for kind, label, limit in kinds:
-            records = [r for r in group_records if r.get('user_id') == user_id and r.get('type') == kind]
+            records = [r for r in all_records if r['kind'] == kind]
             if not records:
                 continue
             parts.append(f"{label} ({len(records)}/{limit})：")
             for i, record in enumerate(records, 1):
-                time_str = datetime.fromisoformat(record['timestamp']).strftime('%H:%M:%S')
-                at_status = '(@)' if record.get('with_at', False) else ''
+                time_str = datetime.fromisoformat(record['created_at']).strftime('%H:%M:%S')
+                at_status = '(@)' if record.get('with_at') else ''
                 parts.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
             parts.append("")
 
@@ -487,40 +448,15 @@ class RandomIdentityPlugin(Star):
     @filter.command("我的主人", alias={'主人历史'})
     async def show_my_owners(self, event: AstrMessageEvent):
         """查看你今天抽到的主人记录与剩余次数（按时间排序）。"""
-        if event.is_private_chat():
-            yield event.plain_result("此功能仅在群聊中可用哦~")
-            return
-        
-        user_id, group_id = event.get_sender_id(), event.get_group_id() 
-        if not group_id:
-            yield event.plain_result("无法获取群组信息")
-            return
-        
-        if self._is_new_day():
-            self._reset_daily_records()
-        
-        group_records = self.records.get("groups", {}).get(group_id, {}).get("records", [])
-        user_records = [r for r in group_records if r.get("user_id") == user_id and r.get("type") == 'owner']
-        
-        if not user_records:
-            yield event.plain_result("你今天还没有抽过主人哦~")
-            return
-        
-        daily_limit = self.config.get("daily_limit_owner", self.config.get("daily_limit", 3))
-        result = [f"你今天的主人记录({len(user_records)}/{daily_limit})："]
-        for i, record in enumerate(user_records, 1):
-            time_str = datetime.fromisoformat(record["timestamp"]).strftime("%H:%M:%S")
-            at_status = "(@)" if record.get("with_at", False) else ""
-            result.append(f"{i}. {record.get('subject_name')} ({record.get('subject_id')}) 在 {time_str} {at_status}")
-        
-        remaining = daily_limit - len(user_records)
-        result.append(f"剩余次数：{remaining}次")
-        yield event.plain_result("\n".join(result))
+        async for r in self._show_history(event, kind='owner', label='主人'):
+            yield r
     
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("重置记录")
     async def reset_records(self, event: AstrMessageEvent):
         """管理员命令：重置今日所有群聊的抽取记录（请谨慎使用）。"""
+        self._cursor.execute("DELETE FROM draw_records WHERE date(created_at)=date('now','localtime')")
+        self._conn.commit()
         self._reset_daily_records()
         yield event.plain_result("今日抽取记录已重置！")
 
@@ -533,17 +469,20 @@ class RandomIdentityPlugin(Star):
         husband_limit = self.config.get("daily_limit_husband", self.config.get("daily_limit", 3))
         father_limit = self.config.get("daily_limit_father", self.config.get("daily_limit", 3))
         excluded_count = len(self.config.get("excluded_users", []))
-        help_text = f"""=== 抽身份 插件 帮助 v2.1.0 ===
+        help_text = f"""=== 抽身份 插件 帮助 v2.2.0 ===
         
     🎯 主要功能：
     • 今日身份 - 列出你今天抽到的所有身份（狗狗/主人/老婆/老公/爸爸）
-    • 今日狗狗 / 抽狗狗 - 随机抽取一位群友作为今日狗狗（带@）
-    • 抽狗狗-@ / 今日狗狗-@ - 不带@
-    • 今日主人 / 抽主人 - 随机抽取一位群友作为今日主人（带@）
-    • 抽主人-@ / 今日主人-@ - 不带@
-    • 抽老婆 / 抽老婆-@ - 抽取老婆（带/不带@）
-    • 抽老公 / 抽老公-@ - 抽取老公（带/不带@）
-    • 抽爸爸 / 抽爸爸-@ - 抽取爸爸（带/不带@）
+    • 今日狗狗 / 抽狗狗 - 随机抽取一位群友作为今日狗狗（不带@）
+    • 今日狗狗@ / 抽狗狗@ - 随机抽取并 @ 被选中的成员
+    • 今日主人 / 抽主人 - 随机抽取一位群友作为今日主人（不带@）
+    • 今日主人@ / 抽主人@ - 随机抽取并 @ 被选中的成员
+    • 今日老婆 / 抽老婆 - 抽取老婆（不带@）
+    • 今日老婆@ / 抽老婆@ - 抽取老婆并 @ 对方
+    • 今日老公 / 抽老公 - 抽取老公（不带@）
+    • 今日老公@ / 抽老公@ - 抽取老公并 @ 对方
+    • 今日爸爸 / 抽爸爸 - 抽取爸爸（不带@）
+    • 今日爸爸@ / 抽爸爸@ - 抽取爸爸并 @ 对方
     • 我的狗狗 / 我的主人 / 我的老婆 / 我的老公 / 我的爸爸 - 查看各自的今日记录
     • 来随机吧 - 新增命令：一次性按各身份的剩余每日上限全部抽取并合并发送（默认不 @，会附带头像）。
     • 重置记录 - 管理员专用，重置今日记录
@@ -562,7 +501,7 @@ class RandomIdentityPlugin(Star):
     
     async def terminate(self):
         try:
-            self._save_records()
+            self._conn.close()
             logger.info("随机抽身份插件资源已清理完毕")
         except Exception as e:
             logger.error(f"插件终止时出现错误: {e}")
