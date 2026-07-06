@@ -39,6 +39,7 @@ class RandomIdentityPlugin(Star):
 
         os.makedirs(self.data_dir, exist_ok=True)
         self._init_db()
+        self._cleanup_stale_records()
         logger.info("随机抽身份插件已加载 (SQLite)")
 
     # ---------- 数据库 ----------
@@ -52,6 +53,21 @@ class RandomIdentityPlugin(Star):
             import shutil
             shutil.copy2(old_db, self.db_path)
             logger.info(f"已迁移旧数据库: {old_db} → {self.db_path}")
+
+    def _cleanup_stale_records(self):
+        """清理配置中已删除身份的遗留记录。"""
+        identities = self.config.get("identities", [])
+        if not identities:
+            return
+        placeholders = ",".join("?" for _ in identities)
+        self._cursor.execute(
+            f"DELETE FROM draw_records WHERE kind NOT IN ({placeholders})",
+            identities,
+        )
+        deleted = self._cursor.rowcount
+        if deleted:
+            self._conn.commit()
+            logger.info(f"已清理 {deleted} 条已删除身份的遗留记录")
 
     def _init_db(self):
         try:
@@ -340,9 +356,8 @@ class RandomIdentityPlugin(Star):
             avatar_url = (
                 f"https://q4.qlogo.cn/headimg_dl?dst_uin={r['id']}&spec=100"
             )
-            chain.append(Comp.Plain("------\n"))
             chain.append(Comp.Image.fromURL(avatar_url))
-            chain.append(Comp.Plain(f"{r['label']}: {r['name']}\n"))
+            chain.append(Comp.Plain(f" {r['label']}: {r['name']}\n"))
 
         yield event.chain_result(chain)
 

@@ -2,6 +2,8 @@
 
 配置驱动式随机抽取插件：在 AstrBot 面板的插件配置中填写身份角色名称，即可使用对应指令随机抽取群友。每个身份每天只能抽取一次。
 
+📦 **一键安装**：AstrBot 面板 → 插件管理 → 输入仓库地址 `https://github.com/KayYiny/astrbot-plugin-identity`
+
 ---
 
 ## 🎯 特性
