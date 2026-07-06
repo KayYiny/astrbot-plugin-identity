@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 from typing import List, Dict, Any
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.api import logger, AstrBotConfig
 import astrbot.api.message_components as Comp
 
@@ -17,8 +17,7 @@ class RandomIdentityPlugin(Star):
     - 在插件面板中配置身份角色列表，动态生成抽取指令
     - 随机抽取群友作为不同身份，支持@与不带@两种模式
     - 每个身份每天只能抽取一次
-    - 持久化保存抽取记录到 SQLite 数据库
-    - 支持一次性抽取所有身份，及查看今日身份状态
+    - 活跃群友优先抽取（可配置）
     """
     def __init__(self, context: Context, config: AstrBotConfig):
         """
@@ -143,6 +142,40 @@ class RandomIdentityPlugin(Star):
             logger.error(f"获取群成员失败: {e}")
             return []
 
+    # ---------- 活跃概率抽取 ----------
+
+    def _pick_member(self, available: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        按活跃概率从可用成员中抽取。
+
+        若 active_days > 0，70% 概率从活跃群友（近 N 天有发言）中抽取，
+        30% 从不活跃群友中抽取。某个池为空时自动降级到另一池。
+        若 active_days = 0，纯随机。
+        """
+        active_days = self.config.get("active_days", 0)
+        if active_days <= 0:
+            return self._pick_member(available)
+
+        now = datetime.now().timestamp()
+        cutoff = now - active_days * 86400
+
+        active = []
+        inactive = []
+        for m in available:
+            last = m.get("last_sent_time")
+            if last and last >= cutoff:
+                active.append(m)
+            else:
+                inactive.append(m)
+
+        # 如果某个池为空，自动降级
+        if not active:
+            return random.choice(inactive)
+        if not inactive:
+            return random.choice(active)
+
+        return random.choice(active if random.random() < 0.7 else inactive)
+
     # ---------- 记录 ----------
 
     def _get_today_count(self, group_id: str, user_id: str, kind: str) -> int:
@@ -229,7 +262,7 @@ class RandomIdentityPlugin(Star):
             yield event.plain_result("群里没有可以抽取的成员哦~")
             return
 
-        target = random.choice(available)
+        target = self._pick_member(available)
         target_id = target.get("user_id")
         target_name = (
             target.get("card")
@@ -335,7 +368,7 @@ class RandomIdentityPlugin(Star):
 
         results = []
         for identity in to_draw:
-            target = random.choice(available)
+            target = self._pick_member(available)
             target_id = target.get("user_id")
             target_name = (
                 target.get("card")
@@ -418,6 +451,8 @@ class RandomIdentityPlugin(Star):
     async def show_help(self, event: AstrMessageEvent):
         """显示插件帮助。"""
         identities = self.config.get("identities", [])
+        active_days = self.config.get("active_days", 0)
+        active_status = f"已启用（{active_days} 天，70% 优先抽活跃成员）" if active_days > 0 else "已关闭"
         excluded_count = len(self.config.get("excluded_users", []))
 
         identity_cmds = "\n".join(
@@ -426,7 +461,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.2.1 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.3.0 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}

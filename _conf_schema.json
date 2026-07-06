@@ -17,5 +17,11 @@
         "items": {
             "type": "string"
         }
+    },
+    "active_days": {
+        "type": "int",
+        "title": "活跃天数",
+        "description": "多少天内有发言算活跃群友。设为 0 关闭活跃概率抽取。启用后 70% 概率抽活跃群友，30% 抽不活跃的。",
+        "default": 7
     }
 }
