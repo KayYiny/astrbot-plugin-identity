@@ -246,7 +246,8 @@ class RandomIdentityPlugin(Star):
             elif isinstance(comp, Comp.Plain):
                 msg_array.append({"type": "text", "data": {"text": comp.text}})
             elif isinstance(comp, Comp.Image):
-                msg_array.append({"type": "image", "data": {"file": comp.url}})
+                src = getattr(comp, "file", None) or getattr(comp, "url", None) or ""
+                msg_array.append({"type": "image", "data": {"file": src}})
 
         try:
             result = await client.api.call_action(
@@ -521,7 +522,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.4.0 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.4.1 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
