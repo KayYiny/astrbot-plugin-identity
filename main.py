@@ -27,14 +27,28 @@ class RandomIdentityPlugin(Star):
         super().__init__(context)
         self.config = config
 
-        self.data_dir = os.path.join("data", "plugins", "random_identity")
+        # 数据库目录使用插件名，确保面板「删除持久化内容」能正确清理
+        self.data_dir = os.path.join("data", "plugins", "随机抽身份")
         self.db_path = os.path.join(self.data_dir, "identity_records.db")
+
+        # 自动迁移旧数据目录（random_identity → 随机抽身份）
+        self._migrate_old_data()
 
         os.makedirs(self.data_dir, exist_ok=True)
         self._init_db()
         logger.info("随机抽身份插件已加载 (SQLite)")
 
     # ---------- 数据库 ----------
+
+    def _migrate_old_data(self):
+        """从旧的 data/plugins/random_identity 迁移数据库文件。"""
+        old_dir = os.path.join("data", "plugins", "random_identity")
+        old_db = os.path.join(old_dir, "identity_records.db")
+        if os.path.exists(old_db) and not os.path.exists(self.db_path):
+            os.makedirs(self.data_dir, exist_ok=True)
+            import shutil
+            shutil.copy2(old_db, self.db_path)
+            logger.info(f"已迁移旧数据库: {old_db} → {self.db_path}")
 
     def _init_db(self):
         try:
@@ -210,7 +224,7 @@ class RandomIdentityPlugin(Star):
             chain.append(Comp.At(qq=target_id))
             chain.append(Comp.Plain("​"))
         else:
-            chain.append(Comp.Plain(f"\n{target_name}"))
+            chain.append(Comp.Plain(target_name))
 
         yield event.chain_result(chain)
 
