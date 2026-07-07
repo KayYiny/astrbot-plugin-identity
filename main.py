@@ -1,6 +1,5 @@
 import os
 import re
-import asyncio
 import sqlite3
 import random
 from datetime import datetime
@@ -152,8 +151,8 @@ class RandomIdentityPlugin(Star):
         """
         按活跃概率从可用成员中抽取。
 
-        若 active_days > 0，70% 概率从活跃群友（近 N 天有发言）中抽取，
-        30% 从不活跃群友中抽取。某个池为空时自动降级到另一池。
+        若 active_days > 0，90% 概率从活跃群友（近 N 天有发言）中抽取，
+        10% 从不活跃群友中抽取。某个池为空时自动降级到另一池。
         若 active_days = 0，纯随机。
         """
         active_days = self.config.get("active_days", 0)
@@ -178,7 +177,7 @@ class RandomIdentityPlugin(Star):
         if not inactive:
             return random.choice(active)
 
-        return random.choice(active if random.random() < 0.7 else inactive)
+        return random.choice(active if random.random() < 0.9 else inactive)
 
     # ---------- 记录 ----------
 
@@ -216,60 +215,6 @@ class RandomIdentityPlugin(Star):
         )
 
 
-
-    # ---------- 自动撤回 ----------
-
-    async def _send_with_auto_delete(self, event, chain, group_id) -> bool:
-        """
-        通过 aiocqhttp API 发送消息并在一分钟后自动撤回。
-
-        返回 True 表示已发送（调用方不应再 yield chain_result），
-        False 表示发送失败，调用方应走正常路径 yield。
-        """
-        if event.get_platform_name() != "aiocqhttp":
-            return False
-
-        try:
-            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
-                AiocqhttpMessageEvent,
-            )
-            assert isinstance(event, AiocqhttpMessageEvent)
-            client = event.bot
-        except (ImportError, AssertionError):
-            return False
-
-        # 将消息链转为 aiocqhttp 消息数组
-        msg_array = []
-        for comp in chain:
-            if isinstance(comp, Comp.At):
-                msg_array.append({"type": "at", "data": {"qq": comp.qq}})
-            elif isinstance(comp, Comp.Plain):
-                msg_array.append({"type": "text", "data": {"text": comp.text}})
-            elif isinstance(comp, Comp.Image):
-                src = getattr(comp, "file", None) or getattr(comp, "url", None) or ""
-                msg_array.append({"type": "image", "data": {"file": src}})
-
-        try:
-            result = await client.api.call_action(
-                "send_group_msg", group_id=group_id, message=msg_array
-            )
-            msg_id = result.get("message_id")
-            if msg_id:
-
-                async def _delete():
-                    await asyncio.sleep(60)
-                    try:
-                        await client.api.call_action(
-                            "delete_msg", message_id=msg_id
-                        )
-                    except Exception as e:
-                        logger.warning(f"撤回消息失败: {e}")
-
-                asyncio.create_task(_delete())
-            return True
-        except Exception as e:
-            logger.error(f"通过 API 发送消息失败，降级到框架发送: {e}")
-            return False
     # ---------- 核心抽取逻辑 ----------
 
     async def _draw_identity_common(
@@ -351,8 +296,7 @@ class RandomIdentityPlugin(Star):
         else:
             chain.append(Comp.Plain(target_name))
 
-        if not await self._send_with_auto_delete(event, chain, group_id):
-            yield event.chain_result(chain)
+        yield event.chain_result(chain)
 
     # ---------- 动态指令分发 ----------
 
@@ -452,8 +396,7 @@ class RandomIdentityPlugin(Star):
             chain.append(Comp.Image.fromURL(avatar_url))
             chain.append(Comp.Plain(f" {r['label']}: {r['name']}\n"))
 
-        if not await self._send_with_auto_delete(event, chain, group_id):
-            yield event.chain_result(chain)
+        yield event.chain_result(chain)
 
     # ---------- 今日身份概览 ----------
 
@@ -513,7 +456,7 @@ class RandomIdentityPlugin(Star):
         """显示插件帮助。"""
         identities = self.config.get("identities", [])
         active_days = self.config.get("active_days", 0)
-        active_status = f"已启用（{active_days} 天，70% 优先抽活跃成员）" if active_days > 0 else "已关闭"
+        active_status = f"已启用（{active_days} 天，90% 优先抽活跃成员）" if active_days > 0 else "已关闭"
         excluded_count = len(self.config.get("excluded_users", []))
 
         identity_cmds = "\n".join(
@@ -522,7 +465,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.4.1 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.5.0 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
