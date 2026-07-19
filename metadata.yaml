@@ -1,5 +1,5 @@
 name: 随机抽身份
 desc: "配置驱动式随机抽取插件。在面板中填写身份角色名称（如老婆、老公、兄弟等），插件自动生成对应的「今日{身份}」「抽{身份}」指令。每个身份每天限抽一次，支持 @ 与不带 @ 两种模式，附带 QQ 头像展示，数据使用 SQLite 持久化存储。"
-version: v1.5.0
+version: v1.5.1
 author: KayYiny
 repo: https://github.com/KayYiny/astrbot-plugin-identity

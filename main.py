@@ -344,14 +344,28 @@ class RandomIdentityPlugin(Star):
             yield event.plain_result("暂无配置身份，请在插件面板中添加身份角色。")
             return
 
+        # 查询今日已抽取的身份记录
+        if self._is_new_day():
+            self._reset_daily_records()
+        self._cursor.execute(
+            "SELECT * FROM draw_records "
+            "WHERE group_id=? AND user_id=? "
+            "AND date(created_at)=date('now','localtime') "
+            "ORDER BY created_at",
+            (group_id, user_id),
+        )
+        drawn_records = {row["kind"]: row for row in self._cursor.fetchall()}
+
         # 过滤出尚未抽取的身份
-        to_draw = []
-        for identity in identities:
-            if self._get_today_count(group_id, user_id, kind=identity) < 1:
-                to_draw.append(identity)
+        to_draw = [i for i in identities if i not in drawn_records]
 
         if not to_draw:
-            yield event.plain_result("你今天已经抽满了所有身份，明天再来吧~")
+            # 已抽满所有身份，列出已有身份
+            parts = ["你今天已经抽满了所有身份，明天再来吧~\n\n当前拥有的身份："]
+            for identity in identities:
+                r = drawn_records[identity]
+                parts.append(f"✅ {identity}: {r['subject_name']}")
+            yield event.plain_result("\n".join(parts))
             return
 
         members = await self._get_group_members(event)
@@ -395,6 +409,14 @@ class RandomIdentityPlugin(Star):
             )
             chain.append(Comp.Image.fromURL(avatar_url))
             chain.append(Comp.Plain(f" {r['label']}: {r['name']}\n"))
+
+        # 展示之前已拥有的身份
+        if drawn_records:
+            chain.append(Comp.Plain("\n你已拥有的身份：\n"))
+            for identity in identities:
+                if identity in drawn_records:
+                    r = drawn_records[identity]
+                    chain.append(Comp.Plain(f"✅ {identity}: {r['subject_name']}\n"))
 
         yield event.chain_result(chain)
 
@@ -465,7 +487,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.5.0 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.5.1 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
