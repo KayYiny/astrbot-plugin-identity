@@ -463,11 +463,21 @@ class RandomIdentityPlugin(Star):
 
     # ---------- 今日身份榜单 ----------
 
-    @filter.command("今日身份榜单")
-    async def show_leaderboard(self, event: AstrMessageEvent):
-        """显示今日各身份的抽取关系榜。"""
+    @filter.regex(r"^今日身份榜单(.*)$")
+    async def show_leaderboard(self, event: AstrMessageEvent, match):
+        """显示今日指定身份的抽取关系榜。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
+            return
+
+        target = match.group(1).strip()
+        if not target:
+            identities = self.config.get("identities", [])
+            hint = "、".join(identities) if identities else "（暂无配置身份）"
+            yield event.plain_result(
+                f"请在指令后加上身份名称，如：今日身份榜单 老婆\n"
+                f"当前可查：{hint}"
+            )
             return
 
         group_id = event.get_group_id()
@@ -478,37 +488,31 @@ class RandomIdentityPlugin(Star):
             self._reset_daily_records()
 
         identities = self.config.get("identities", [])
-        if not identities:
-            yield event.plain_result("暂无配置身份，请在插件面板中添加身份角色。")
+        if target not in identities:
+            yield event.plain_result(f"「{target}」不在已配置的身份列表中。")
             return
 
-        # 查询今日所有抽取记录（谁抽了谁）
-        placeholders = ",".join("?" for _ in identities)
+        # 查询今日该身份的所有抽取记录
         self._cursor.execute(
-            f"SELECT kind, user_id, subject_id, subject_name "
-            f"FROM draw_records "
-            f"WHERE group_id=? AND kind IN ({placeholders}) "
-            f"AND date(created_at)=date('now','localtime') "
-            f"ORDER BY kind, created_at",
-            [group_id] + identities,
+            "SELECT user_id, subject_id, subject_name FROM draw_records "
+            "WHERE group_id=? AND kind=? "
+            "AND date(created_at)=date('now','localtime') "
+            "ORDER BY created_at",
+            (group_id, target),
         )
         rows = self._cursor.fetchall()
 
-        # 构建 user_id -> 昵称映射（从记录中提取发起者信息）
-        # 同时构建 subject 的最新昵称映射
+        if not rows:
+            yield event.plain_result(f"🏆 {target} 榜单\n\n今日暂无记录")
+            return
+
+        # 构建昵称映射
         user_names = {}
         for row in rows:
             user_names[row["subject_id"]] = row["subject_name"]
 
-        # 需要补充发起者的昵称：从群成员信息或记录中获取
-        # 查询今日记录中作为 user_id 出现过的，也查一下他们的 subject_name
-        self._cursor.execute(
-            f"SELECT DISTINCT user_id FROM draw_records "
-            f"WHERE group_id=? AND kind IN ({placeholders}) "
-            f"AND date(created_at)=date('now','localtime')",
-            [group_id] + identities,
-        )
-        drawer_ids = [r["user_id"] for r in self._cursor.fetchall()]
+        # 补充发起者昵称
+        drawer_ids = list({row["user_id"] for row in rows})
         for uid in drawer_ids:
             if uid not in user_names:
                 self._cursor.execute(
@@ -521,35 +525,22 @@ class RandomIdentityPlugin(Star):
                 if r:
                     user_names[uid] = r["subject_name"]
 
-        # 按身份分组，再按 subject 分组
-        # {kind: {subject_name: [drawer_name, ...]}}
-        identity_data = defaultdict(lambda: defaultdict(list))
+        # 按 subject 分组：{被抽中者: [抽到TA的人, ...]}
+        subjects = defaultdict(list)
         for row in rows:
-            kind = row["kind"]
             subject_name = user_names.get(row["subject_id"], row["subject_id"])
             drawer_name = user_names.get(row["user_id"], row["user_id"])
-            identity_data[kind][subject_name].append(drawer_name)
+            subjects[subject_name].append(drawer_name)
 
-        sections = []
+        # 按被抽中次数排序
+        sorted_subjects = sorted(subjects.items(), key=lambda x: -len(x[1]))
 
-        for identity in identities:
-            subjects = identity_data.get(identity, {})
-            lines = [f"🏆 {identity} 榜单", "", f"上面的是下面的{identity}", ""]
+        lines = [f"🏆 {target} 榜单", ""]
+        for subject, drawers in sorted_subjects:
+            names = "、".join(drawers)
+            lines.append(f"{names} 的{target}是 {subject}")
 
-            if not subjects:
-                lines.append("暂无记录")
-            else:
-                # 按被抽中次数排序（被抽得多的排前面）
-                sorted_subjects = sorted(
-                    subjects.items(), key=lambda x: -len(x[1])
-                )
-                for i, (subject, drawers) in enumerate(sorted_subjects):
-                    names = "、".join(drawers)
-                    lines.append(f"{names} 的{identity}是 {subject}")
-
-            sections.append("\n".join(lines))
-
-        yield event.plain_result("\n\n".join(sections))
+        yield event.plain_result("\n".join(lines))
 
     # ---------- 管理 ----------
 
@@ -578,7 +569,7 @@ class RandomIdentityPlugin(Star):
             for iden in identities
         )
 
-        help_text = f"""=== 随机抽身份 帮助 v1.6.0 ===
+        help_text = f"""=== 随机抽身份 帮助 v1.6.1 ===
 
 🎯 已配置身份（{len(identities)} 个）：
 {identity_cmds if identity_cmds else "    （暂无配置，请在插件面板中添加身份角色）"}
@@ -586,7 +577,7 @@ class RandomIdentityPlugin(Star):
 📋 其他指令：
     • 我的身份 - 查看你今天所有身份的抽取状态
     • 来随机吧 - 一次性抽取所有尚未抽取的身份
-    • 今日身份榜单 - 查看今日各身份抽取排行榜
+    • 今日身份榜单 XX - 查看指定身份今日抽取关系
     • 重置记录 - 管理员专用，重置今日记录
 
 📝 使用说明：
