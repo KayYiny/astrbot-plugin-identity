@@ -2,6 +2,7 @@ import os
 import re
 import sqlite3
 import random
+from collections import defaultdict
 from datetime import datetime
 from typing import List, Dict, Any
 from astrbot.api.event import filter, AstrMessageEvent
@@ -460,6 +461,81 @@ class RandomIdentityPlugin(Star):
 
         yield event.plain_result("\n".join(parts))
 
+    # ---------- 今日身份榜单 ----------
+
+    @filter.command("今日身份榜单")
+    async def show_leaderboard(self, event: AstrMessageEvent):
+        """显示今日各身份的抽取排行榜。"""
+        if event.is_private_chat():
+            yield event.plain_result("此功能仅在群聊中可用哦~")
+            return
+
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("无法获取群组信息")
+            return
+        if self._is_new_day():
+            self._reset_daily_records()
+
+        identities = self.config.get("identities", [])
+        if not identities:
+            yield event.plain_result("暂无配置身份，请在插件面板中添加身份角色。")
+            return
+
+        # 查询今日各身份被抽中的次数排行
+        placeholders = ",".join("?" for _ in identities)
+        self._cursor.execute(
+            f"SELECT kind, subject_id, "
+            f"(SELECT subject_name FROM draw_records dr2 "
+            f" WHERE dr2.group_id=dr1.group_id AND dr2.kind=dr1.kind "
+            f" AND dr2.subject_id=dr1.subject_id "
+            f" AND date(dr2.created_at)=date('now','localtime') "
+            f" ORDER BY dr2.created_at DESC LIMIT 1) AS subject_name, "
+            f"COUNT(*) AS cnt "
+            f"FROM draw_records dr1 "
+            f"WHERE group_id=? AND kind IN ({placeholders}) "
+            f"AND date(created_at)=date('now','localtime') "
+            f"GROUP BY kind, subject_id "
+            f"ORDER BY kind, cnt DESC",
+            [group_id] + identities,
+        )
+        rows = self._cursor.fetchall()
+
+        # 按 kind 分组
+        groups = defaultdict(list)
+        for row in rows:
+            groups[row["kind"]].append((row["subject_name"], row["cnt"]))
+
+        medals = ["🥇", "🥈", "🥉"]
+        sections = []
+
+        for identity in identities:
+            entries = groups.get(identity, [])
+            lines = [f"🏆 {identity} 榜单", "", f"上面的是下面的{identity}", ""]
+
+            if not entries:
+                lines.append("暂无记录")
+            else:
+                # 按 cnt 分组（处理并列）
+                ranked = []  # [(rank, [name, ...]), ...]
+                prev_cnt = None
+                for name, cnt in entries:
+                    if cnt != prev_cnt:
+                        ranked.append((len(ranked) + 1, []))
+                        prev_cnt = cnt
+                    ranked[-1][1].append(name)
+
+                for rank, names in ranked:
+                    if rank <= len(medals):
+                        prefix = medals[rank - 1]
+                    else:
+                        prefix = f"  {rank}."
+                    lines.append(f"{prefix} {'、'.join(names)}")
+
+            sections.append("\n".join(lines))
+
+        yield event.plain_result("\n\n".join(sections))
+
     # ---------- 管理 ----------
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -495,6 +571,7 @@ class RandomIdentityPlugin(Star):
 📋 其他指令：
     • 我的身份 - 查看你今天所有身份的抽取状态
     • 来随机吧 - 一次性抽取所有尚未抽取的身份
+    • 今日身份榜单 - 查看今日各身份抽取排行榜
     • 重置记录 - 管理员专用，重置今日记录
 
 📝 使用说明：
