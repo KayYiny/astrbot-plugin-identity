@@ -301,7 +301,7 @@ class RandomIdentityPlugin(Star):
 
     # ---------- 动态指令分发 ----------
 
-    @filter.regex(r'^(?:今日|抽)(.+?)(@?)$')
+    @filter.regex(r'^(?:今日(?!身份榜单)|抽)(.+?)(@?)$')
     async def on_dynamic_draw(self, event: AstrMessageEvent):
         """
         动态匹配「今日{身份}」「抽{身份}」指令。
