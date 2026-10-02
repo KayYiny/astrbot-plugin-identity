@@ -463,7 +463,17 @@ class RandomIdentityPlugin(Star):
 
     # ---------- 今日身份榜单 ----------
 
-    @filter.regex(r"^今日身份榜单(.*)$")
+    @filter.command("今日身份榜单")
+    async def show_leaderboard_hint(self, event: AstrMessageEvent):
+        """不带身份名时提示用法。"""
+        identities = self.config.get("identities", [])
+        hint = "、".join(identities) if identities else "（暂无配置身份）"
+        yield event.plain_result(
+            f"请在指令后加上身份名称，如：今日身份榜单 老婆\n"
+            f"当前可查：{hint}"
+        )
+
+    @filter.regex(r"^今日身份榜单(.+)$")
     async def show_leaderboard(self, event: AstrMessageEvent, match):
         """显示今日指定身份的抽取关系榜。"""
         if event.is_private_chat():
@@ -472,12 +482,7 @@ class RandomIdentityPlugin(Star):
 
         target = match.group(1).strip()
         if not target:
-            identities = self.config.get("identities", [])
-            hint = "、".join(identities) if identities else "（暂无配置身份）"
-            yield event.plain_result(
-                f"请在指令后加上身份名称，如：今日身份榜单 老婆\n"
-                f"当前可查：{hint}"
-            )
+            yield event.plain_result("请输入身份名称，如：今日身份榜单 老婆")
             return
 
         group_id = event.get_group_id()
