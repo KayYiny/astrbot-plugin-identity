@@ -465,7 +465,7 @@ class RandomIdentityPlugin(Star):
 
     @filter.command("今日身份榜单")
     async def show_leaderboard(self, event: AstrMessageEvent):
-        """显示今日各身份的抽取排行榜。"""
+        """显示今日各身份的抽取关系榜。"""
         if event.is_private_chat():
             yield event.plain_result("此功能仅在群聊中可用哦~")
             return
@@ -482,55 +482,70 @@ class RandomIdentityPlugin(Star):
             yield event.plain_result("暂无配置身份，请在插件面板中添加身份角色。")
             return
 
-        # 查询今日各身份被抽中的次数排行
+        # 查询今日所有抽取记录（谁抽了谁）
         placeholders = ",".join("?" for _ in identities)
         self._cursor.execute(
-            f"SELECT kind, subject_id, "
-            f"(SELECT subject_name FROM draw_records dr2 "
-            f" WHERE dr2.group_id=dr1.group_id AND dr2.kind=dr1.kind "
-            f" AND dr2.subject_id=dr1.subject_id "
-            f" AND date(dr2.created_at)=date('now','localtime') "
-            f" ORDER BY dr2.created_at DESC LIMIT 1) AS subject_name, "
-            f"COUNT(*) AS cnt "
-            f"FROM draw_records dr1 "
+            f"SELECT kind, user_id, subject_id, subject_name "
+            f"FROM draw_records "
             f"WHERE group_id=? AND kind IN ({placeholders}) "
             f"AND date(created_at)=date('now','localtime') "
-            f"GROUP BY kind, subject_id "
-            f"ORDER BY kind, cnt DESC",
+            f"ORDER BY kind, created_at",
             [group_id] + identities,
         )
         rows = self._cursor.fetchall()
 
-        # 按 kind 分组
-        groups = defaultdict(list)
+        # 构建 user_id -> 昵称映射（从记录中提取发起者信息）
+        # 同时构建 subject 的最新昵称映射
+        user_names = {}
         for row in rows:
-            groups[row["kind"]].append((row["subject_name"], row["cnt"]))
+            user_names[row["subject_id"]] = row["subject_name"]
 
-        medals = ["🥇", "🥈", "🥉"]
+        # 需要补充发起者的昵称：从群成员信息或记录中获取
+        # 查询今日记录中作为 user_id 出现过的，也查一下他们的 subject_name
+        self._cursor.execute(
+            f"SELECT DISTINCT user_id FROM draw_records "
+            f"WHERE group_id=? AND kind IN ({placeholders}) "
+            f"AND date(created_at)=date('now','localtime')",
+            [group_id] + identities,
+        )
+        drawer_ids = [r["user_id"] for r in self._cursor.fetchall()]
+        for uid in drawer_ids:
+            if uid not in user_names:
+                self._cursor.execute(
+                    "SELECT subject_name FROM draw_records "
+                    "WHERE group_id=? AND user_id=? "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (group_id, uid),
+                )
+                r = self._cursor.fetchone()
+                if r:
+                    user_names[uid] = r["subject_name"]
+
+        # 按身份分组，再按 subject 分组
+        # {kind: {subject_name: [drawer_name, ...]}}
+        identity_data = defaultdict(lambda: defaultdict(list))
+        for row in rows:
+            kind = row["kind"]
+            subject_name = user_names.get(row["subject_id"], row["subject_id"])
+            drawer_name = user_names.get(row["user_id"], row["user_id"])
+            identity_data[kind][subject_name].append(drawer_name)
+
         sections = []
 
         for identity in identities:
-            entries = groups.get(identity, [])
+            subjects = identity_data.get(identity, {})
             lines = [f"🏆 {identity} 榜单", "", f"上面的是下面的{identity}", ""]
 
-            if not entries:
+            if not subjects:
                 lines.append("暂无记录")
             else:
-                # 按 cnt 分组（处理并列）
-                ranked = []  # [(rank, [name, ...]), ...]
-                prev_cnt = None
-                for name, cnt in entries:
-                    if cnt != prev_cnt:
-                        ranked.append((len(ranked) + 1, []))
-                        prev_cnt = cnt
-                    ranked[-1][1].append(name)
-
-                for rank, names in ranked:
-                    if rank <= len(medals):
-                        prefix = medals[rank - 1]
-                    else:
-                        prefix = f"  {rank}."
-                    lines.append(f"{prefix} {'、'.join(names)}")
+                # 按被抽中次数排序（被抽得多的排前面）
+                sorted_subjects = sorted(
+                    subjects.items(), key=lambda x: -len(x[1])
+                )
+                for i, (subject, drawers) in enumerate(sorted_subjects):
+                    names = "、".join(drawers)
+                    lines.append(f"{names} 的{identity}是 {subject}")
 
             sections.append("\n".join(lines))
 
